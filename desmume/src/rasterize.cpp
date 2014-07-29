@@ -1820,7 +1820,7 @@ void SoftRasterizerEngine::ProcessClippedPolygons(const u32 width, const u32 hei
 	
 	u32 i, j;
 	
-	for(i = 0; i < clippedPolyCounter; ++i)			// ƒ‹[ƒv‚ğ1‚Â‚É‚Ü‚Æ‚ß‚Ä‚‘¬‰»‚Ì‚Â‚à‚è
+	for(i = 0; i < clippedPolyCounter; ++i)			// ãƒ«ãƒ¼ãƒ—ã‚’1ã¤ã«ã¾ã¨ã‚ã¦é«˜é€ŸåŒ–ã®ã¤ã‚‚ã‚Š
 	{
 		GFX3D_Clipper::TClippedPoly& clipped_poly = clippedPolys[i];
 		POLY *poly = clipped_poly.poly;
@@ -2112,7 +2112,7 @@ void SoftRasterizerEngine::DrawFog_forHighResolution()
 		{
 			fog2 = 128 - fog;
 			
-			// ƒtƒHƒO‚Ì•`‰æŒ‹‰Ê‚ğ•W€SoftRasterizer‚Æ“¯‚¶‚É‚·‚é‚½‚ß‚ÉƒtƒHƒO‚Ìalpha‚ğ–³‹
+			// ãƒ•ã‚©ã‚°ã®æç”»çµæœã‚’æ¨™æº–SoftRasterizerã¨åŒã˜ã«ã™ã‚‹ãŸã‚ã«ãƒ•ã‚©ã‚°ã®alphaã‚’ç„¡è¦–
 			if(FOG_ALPHA_ONLY)
 				destFragmentColor->a = ( (fog2 * destFragmentColor->a) + (a * fog) ) >> 7;
 			else
@@ -2217,13 +2217,13 @@ namespace X432R
 		RGBA8888 result;
 		
 		if(color.a == 0)
-			return result;		// RGBA8888‚Í¶¬‚É0‚Å‰Šú‰»‚³‚ê‚Ä‚¢‚é
+			return result;		// RGBA8888ã¯ç”Ÿæˆæ™‚ã«0ã§åˆæœŸåŒ–ã•ã‚Œã¦ã„ã‚‹
 		
-		// RGBA6665 ¨ BGRA8888
+		// RGBA6665 â†’ BGRA8888
 		result.R = color.r << 2;
 		result.G = color.g << 2;
 		result.B = color.b << 2;
-//		result.A = (color.a << 3) + 7;	// 0x1F‚ğ3ƒrƒbƒg¶ƒVƒtƒg‚µ‚Ä‚à•s“§–¾‚É‚È‚ç‚È‚¢‚½‚ß’l‚ğƒIƒtƒZƒbƒg
+//		result.A = (color.a << 3) + 7;	// 0x1Fã‚’3ãƒ“ãƒƒãƒˆå·¦ã‚·ãƒ•ãƒˆã—ã¦ã‚‚ä¸é€æ˜ã«ãªã‚‰ãªã„ãŸã‚å€¤ã‚’ã‚ªãƒ•ã‚»ãƒƒãƒˆ
 		result.A = color.a << 3;
 		
 		return result;
@@ -2280,13 +2280,13 @@ namespace X432R
 				
 				gfx3d_buffer = gfx3d_buffer_begin + downscaled_y + (x / RENDER_MAGNIFICATION);
 				
-				// •Ï‘¥NearestNeighbori’†S“_‚ª“§–¾‚¾‚Á‚½ê‡A¶ãA‰EãA¶‰ºA‰E‰º‚Ì’†‚Å•s“§–¾‚Ì“_‚ğÌ—p‚·‚éj
+				// å¤‰å‰‡NearestNeighborï¼ˆä¸­å¿ƒç‚¹ãŒé€æ˜ã ã£ãŸå ´åˆã€å·¦ä¸Šã€å³ä¸Šã€å·¦ä¸‹ã€å³ä¸‹ã®ä¸­ã§ä¸é€æ˜ã®ç‚¹ã‚’æ¡ç”¨ã™ã‚‹ï¼‰
 				if( (RENDER_MAGNIFICATION == 2) || ( remainder_y != (1 << 16) ) || (remainder_x != 1) )
 				{
 					switch(remainder_y | remainder_x)
 					{
 						case 0:											// x == 0, y == 0
-							*gfx3d_buffer = color_rgba8888.Color;		// gfx3d_ConvertedScreen“à‚ÌƒsƒNƒZƒ‹ƒtƒH[ƒ}ƒbƒg‚ÍRGBA6665‚¾‚ªAˆê“I‚ÉRGBA8888‚Ì‚Ü‚Ü’l‚ğ•Û‘¶
+							*gfx3d_buffer = color_rgba8888.Color;		// gfx3d_ConvertedScreenå†…ã®ãƒ”ã‚¯ã‚»ãƒ«ãƒ•ã‚©ãƒ¼ãƒãƒƒãƒˆã¯RGBA6665ã ãŒã€ä¸€æ™‚çš„ã«RGBA8888ã®ã¾ã¾å€¤ã‚’ä¿å­˜
 							break;
 						
 						case (RENDER_MAGNIFICATION - 1):
@@ -2303,7 +2303,7 @@ namespace X432R
 //							if( (color_rgba8888.A > 0xF0) && (color_rgba8888.A < 0xFF) )
 //								color_rgba8888.A = 0xFF;
 							
-							*gfx3d_buffer = RGBA8888ToFragmentColor(color_rgba8888).color;			// ƒsƒNƒZƒ‹ƒtƒH[ƒ}ƒbƒg‚ğRGBA6665‚É•ÏŠ·‚µ‚Ä’l‚ğ•Û‘¶
+							*gfx3d_buffer = RGBA8888ToFragmentColor(color_rgba8888).color;			// ãƒ”ã‚¯ã‚»ãƒ«ãƒ•ã‚©ãƒ¼ãƒãƒƒãƒˆã‚’RGBA6665ã«å¤‰æ›ã—ã¦å€¤ã‚’ä¿å­˜
 							break;
 						
 						default:
@@ -2313,20 +2313,20 @@ namespace X432R
 					continue;
 				}
 				
-				if(color_rgba8888.A > 0)		// (x == 1, y == 1)FŠÈˆÕ’†S“_”»’èix2:2‰æ‘f‚Ì‰E‘¤, x3:3‰æ‘f‚Ì’†‰›, x4:4‰æ‘f‚Ì¶‚©‚ç2‚Â‚ß‚ğ’†S“_‚ÆŒ©‚È‚·j
+				if(color_rgba8888.A > 0)		// (x == 1, y == 1)ï¼šç°¡æ˜“ä¸­å¿ƒç‚¹åˆ¤å®šï¼ˆx2:2ç”»ç´ ã®å³å´, x3:3ç”»ç´ ã®ä¸­å¤®, x4:4ç”»ç´ ã®å·¦ã‹ã‚‰2ã¤ã‚ã‚’ä¸­å¿ƒç‚¹ã¨è¦‹ãªã™ï¼‰
 					*gfx3d_buffer = color_rgba8888.Color;
 				
 /*				#if 1
-				// •Ï‘¥NearestNeighbori’†S“_‚ª“§–¾‚¾‚Á‚½ê‡A¶ãA‰EãA¶‰ºA‰E‰º‚Ì’†‚Å•s“§–¾‚Ì“_‚ğÌ—p‚·‚éj
+				// å¤‰å‰‡NearestNeighborï¼ˆä¸­å¿ƒç‚¹ãŒé€æ˜ã ã£ãŸå ´åˆã€å·¦ä¸Šã€å³ä¸Šã€å·¦ä¸‹ã€å³ä¸‹ã®ä¸­ã§ä¸é€æ˜ã®ç‚¹ã‚’æ¡ç”¨ã™ã‚‹ï¼‰
 				gfx3d_buffer = gfx3d_buffer + downscaled_index;
 				
 				if( (remainder_x == 0) && (remainder_y == 0) )
 				{
-					*gfx3d_buffer = color_rgba8888.Color;		// gfx3d_ConvertedScreen“à‚ÌƒsƒNƒZƒ‹ƒtƒH[ƒ}ƒbƒg‚ÍRGBA6665‚¾‚ªAˆê“I‚ÉRGBA8888‚Ì‚Ü‚Ü’l‚ğ•Û‘¶
+					*gfx3d_buffer = color_rgba8888.Color;		// gfx3d_ConvertedScreenå†…ã®ãƒ”ã‚¯ã‚»ãƒ«ãƒ•ã‚©ãƒ¼ãƒãƒƒãƒˆã¯RGBA6665ã ãŒã€ä¸€æ™‚çš„ã«RGBA8888ã®ã¾ã¾å€¤ã‚’ä¿å­˜
 					continue;
 				}
 				
-				if( (remainder_x == 1) && (remainder_y == 1) && (color_rgba8888.A > 0) )	// ŠÈˆÕ’†S“_”»’èix2:2‰æ‘f‚Ì‰E‘¤, x3:3‰æ‘f‚Ì’†‰›, x4:4‰æ‘f‚Ì¶‚©‚ç2‚Â‚ß‚ğ’†S“_‚ÆŒ©‚È‚·j
+				if( (remainder_x == 1) && (remainder_y == 1) && (color_rgba8888.A > 0) )	// ç°¡æ˜“ä¸­å¿ƒç‚¹åˆ¤å®šï¼ˆx2:2ç”»ç´ ã®å³å´, x3:3ç”»ç´ ã®ä¸­å¤®, x4:4ç”»ç´ ã®å·¦ã‹ã‚‰2ã¤ã‚ã‚’ä¸­å¿ƒç‚¹ã¨è¦‹ãªã™ï¼‰
 					*gfx3d_buffer = color_rgba8888.Color;
 				
 				if( ( (remainder_x != 0) && ( remainder_x != (RENDER_MAGNIFICATION - 1) ) ) || ( (remainder_y != 0) && ( remainder_y != (RENDER_MAGNIFICATION - 1) ) ) ) continue;
@@ -2341,10 +2341,10 @@ namespace X432R
 					if( (color_rgba8888.A > 0xF0) && (color_rgba8888.A < 0xFF) )
 						color_rgba8888.A = 0xFF;
 					
-					*gfx3d_buffer = RGBA8888ToFragmentColor(color_rgba8888).color;			// ƒsƒNƒZƒ‹ƒtƒH[ƒ}ƒbƒg‚ğRGBA6665‚É•ÏŠ·‚µ‚Ä’l‚ğ•Û‘¶
+					*gfx3d_buffer = RGBA8888ToFragmentColor(color_rgba8888).color;			// ãƒ”ã‚¯ã‚»ãƒ«ãƒ•ã‚©ãƒ¼ãƒãƒƒãƒˆã‚’RGBA6665ã«å¤‰æ›ã—ã¦å€¤ã‚’ä¿å­˜
 				}
 				#else
-				// ŠÈˆÕNearestNeighborix2:2‰æ‘f‚Ì‰E‘¤, x3:3‰æ‘f‚Ì’†‰›, x4:4‰æ‘f‚Ì¶‚©‚ç2‚Â‚ß‚ğ’†S“_‚ÆŒ©‚È‚·j
+				// ç°¡æ˜“NearestNeighborï¼ˆx2:2ç”»ç´ ã®å³å´, x3:3ç”»ç´ ã®ä¸­å¤®, x4:4ç”»ç´ ã®å·¦ã‹ã‚‰2ã¤ã‚ã‚’ä¸­å¿ƒç‚¹ã¨è¦‹ãªã™ï¼‰
 				if( (remainder_x != 1) && (remainder_y != 1) ) continue;
 				
 				if( (color_rgba8888.A > 0xF0) && (color_rgba8888.A < 0xFF) )
