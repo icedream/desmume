@@ -2298,7 +2298,7 @@ static void SoftAP_RXHandler(u_char* user, const struct pcap_pkthdr* h, const u_
 	u8* data = (u8*)_data;
 
 	// reject the packet if it wasn't for us
-	if (!(WIFI_isBroadcastMAC(&data[0]) || WIFI_compareMAC(&data[0], wifiMac.mac.bytes)))
+	if (!((WIFI_isBroadcastMAC(&data[0]) && SoftAP.status != APStatus_Disconnected) || WIFI_compareMAC(&data[0], wifiMac.mac.bytes)))
 		return;
 
 	// reject the packet if we just sent it
