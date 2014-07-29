@@ -164,7 +164,7 @@ std::string Path::ScrubInvalid(std::string str)
 		
 		if(*c == '\0') break;
 		
-		size = _mbclen( (unsigned char *)c );		// •¶š‚ÌƒoƒCƒg”‚ğæ“¾
+		size = _mbclen( (unsigned char *)c );		// æ–‡å­—ã®ãƒã‚¤ãƒˆæ•°ã‚’å–å¾—
 		
 		if(size <= 0) break;
 		if(size != 1) continue;
