@@ -40,23 +40,23 @@ inline TYPE clamp(const TYPE value, const TYPE min, const TYPE max)
 }
 
 
-// 高解像度3Dレンダリングを有効化
+// Enable the high resolution 3D rendering
 #define X432R_CUSTOMRENDERER_ENABLED
 
-// タッチ入力関係の変更を有効化
+// Enable the change of touch input relationship
 #define X432R_TOUCHINPUT_ENABLED
 
-// メニュー関係の変更を有効化
+// Enable the change of menu relationship
 #define X432R_MENUITEMMOD_ENABLED
 #define X432R_MENUITEMMOD_ENABLED2
 
-// ファイルパス関係の変更を有効化
+// Enable the change of file path relationship
 #define X432R_FILEPATHMOD_ENABLED
 
 
 namespace X432R
 {
-	//--- ｉ恣x3Dレンダリング ---
+	//--- High resolution 3D rendering ---
 	#ifdef X432R_CUSTOMRENDERER_ENABLED
 		// debug
 //		#define X432R_SINGLECORE_TEST
@@ -142,7 +142,7 @@ namespace X432R
 	#endif
 	
 	
-	//--- メニュー ---
+	//--- Menu ---
 	#ifdef X432R_MENUITEMMOD_ENABLED
 //		#define X432R_OPENGL_TEXTUREFILTER_ENABLED
 		
