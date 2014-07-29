@@ -3550,7 +3550,7 @@ namespace X432R
 		#endif
 		
 		
-		// ‚‰ğ‘œ“x3DƒŒƒ“ƒ_ƒŠƒ“ƒO—pFBOì¬
+		// é«˜è§£åƒåº¦3Dãƒ¬ãƒ³ãƒ€ãƒªãƒ³ã‚°ç”¨FBOä½œæˆ
 		glGenRenderbuffersEXT(1, &highResolutionRenderbuffer_Color);
 		glGenRenderbuffersEXT(1, &highResolutionRenderbuffer_DepthStencil);
 		
@@ -4248,13 +4248,13 @@ namespace X432R
 				
 				gfx3d_buffer = gfx3d_buffer_begin + downscaled_y + (x / RENDER_MAGNIFICATION);
 				
-				// •Ï‘¥NearestNeighbori’†S“_‚ª“§–¾‚¾‚Á‚½ê‡A¶ãA‰EãA¶‰ºA‰E‰º‚Ì’†‚Å•s“§–¾‚Ì“_‚ğÌ—p‚·‚éj
+				// å¤‰å‰‡NearestNeighborï¼ˆä¸­å¿ƒç‚¹ãŒé€æ˜ã ã£ãŸå ´åˆã€å·¦ä¸Šã€å³ä¸Šã€å·¦ä¸‹ã€å³ä¸‹ã®ä¸­ã§ä¸é€æ˜ã®ç‚¹ã‚’æ¡ç”¨ã™ã‚‹ï¼‰
 				if( (RENDER_MAGNIFICATION == 2) || ( remainder_y != (1 << 16) ) || (remainder_x != 1) )
 				{
 					switch(remainder_y | remainder_x)
 					{
 						case 0:												// remainder_x == 0, remainder_y == 0
-							*gfx3d_buffer = color_rgba8888.Color;			// gfx3d_ConvertedScreen“à‚ÌƒsƒNƒZƒ‹ƒtƒH[ƒ}ƒbƒg‚ÍRGBA6665‚¾‚ªAˆê“I‚ÉRGBA8888‚Ì‚Ü‚Ü’l‚ğ•Û‘¶
+							*gfx3d_buffer = color_rgba8888.Color;			// gfx3d_ConvertedScreenå†…ã®ãƒ”ã‚¯ã‚»ãƒ«ãƒ•ã‚©ãƒ¼ãƒãƒƒãƒˆã¯RGBA6665ã ãŒã€ä¸€æ™‚çš„ã«RGBA8888ã®ã¾ã¾å€¤ã‚’ä¿å­˜
 							break;
 						
 						case (RENDER_MAGNIFICATION - 1):
@@ -4274,7 +4274,7 @@ namespace X432R
 							#ifdef WORDS_BIGENDIAN
 							*gfx3d_buffer = BGRA8888_32_To_RGBA6665_32(color_rgba8888.Color);
 							#else
-							*gfx3d_buffer = BGRA8888_32Rev_To_RGBA6665_32Rev(color_rgba8888.Color);	// ƒsƒNƒZƒ‹ƒtƒH[ƒ}ƒbƒg‚ğRGBA6665‚É•ÏŠ·‚µ‚Ä’l‚ğ•Û‘¶
+							*gfx3d_buffer = BGRA8888_32Rev_To_RGBA6665_32Rev(color_rgba8888.Color);	// ãƒ”ã‚¯ã‚»ãƒ«ãƒ•ã‚©ãƒ¼ãƒãƒƒãƒˆã‚’RGBA6665ã«å¤‰æ›ã—ã¦å€¤ã‚’ä¿å­˜
 							#endif
 							break;
 						
@@ -4285,21 +4285,21 @@ namespace X432R
 					continue;
 				}
 				
-				if(color_rgba8888.A > 0)		// (remainder_x == 1, remainder_y == 1)FŠÈˆÕ’†S“_”»’èix2:2‰æ‘f‚Ì‰E‘¤, x3:3‰æ‘f‚Ì’†‰›, x4:4‰æ‘f‚Ì¶‚©‚ç2‚Â‚ß‚ğ’†S“_‚ÆŒ©‚È‚·j
+				if(color_rgba8888.A > 0)		// (remainder_x == 1, remainder_y == 1)ï¼šç°¡æ˜“ä¸­å¿ƒç‚¹åˆ¤å®šï¼ˆx2:2ç”»ç´ ã®å³å´, x3:3ç”»ç´ ã®ä¸­å¤®, x4:4ç”»ç´ ã®å·¦ã‹ã‚‰2ã¤ã‚ã‚’ä¸­å¿ƒç‚¹ã¨è¦‹ãªã™ï¼‰
 					*gfx3d_buffer = color_rgba8888.Color;
 				
 /*				#if 1
 				gfx3d_buffer = gfx3d_buffer_begin + downscaled_index;
 				
-				// •Ï‘¥NearestNeighbori’†S“_‚ª“§–¾‚¾‚Á‚½ê‡A¶ãA‰EãA¶‰ºA‰E‰º‚Ì’†‚Å•s“§–¾‚Ì“_‚ğÌ—p‚·‚éj
+				// å¤‰å‰‡NearestNeighborï¼ˆä¸­å¿ƒç‚¹ãŒé€æ˜ã ã£ãŸå ´åˆã€å·¦ä¸Šã€å³ä¸Šã€å·¦ä¸‹ã€å³ä¸‹ã®ä¸­ã§ä¸é€æ˜ã®ç‚¹ã‚’æ¡ç”¨ã™ã‚‹ï¼‰
 				#if 0
 				if( (remainder_x == 0) && (remainder_y == 0) )
 				{
-					*gfx3d_buffer = color_rgba8888.Color;		// gfx3d_ConvertedScreen“à‚ÌƒsƒNƒZƒ‹ƒtƒH[ƒ}ƒbƒg‚ÍRGBA6665‚¾‚ªAˆê“I‚ÉRGBA8888‚Ì‚Ü‚Ü’l‚ğ•Û‘¶
+					*gfx3d_buffer = color_rgba8888.Color;		// gfx3d_ConvertedScreenå†…ã®ãƒ”ã‚¯ã‚»ãƒ«ãƒ•ã‚©ãƒ¼ãƒãƒƒãƒˆã¯RGBA6665ã ãŒã€ä¸€æ™‚çš„ã«RGBA8888ã®ã¾ã¾å€¤ã‚’ä¿å­˜
 					continue;
 				}
 				
-				if( (remainder_x == 1) && (remainder_y == 1) && (color_rgba8888.A > 0) )	// ŠÈˆÕ’†S“_”»’èix2:2‰æ‘f‚Ì‰E‘¤, x3:3‰æ‘f‚Ì’†‰›, x4:4‰æ‘f‚Ì¶‚©‚ç2‚Â‚ß‚ğ’†S“_‚ÆŒ©‚È‚·j
+				if( (remainder_x == 1) && (remainder_y == 1) && (color_rgba8888.A > 0) )	// ç°¡æ˜“ä¸­å¿ƒç‚¹åˆ¤å®šï¼ˆx2:2ç”»ç´ ã®å³å´, x3:3ç”»ç´ ã®ä¸­å¤®, x4:4ç”»ç´ ã®å·¦ã‹ã‚‰2ã¤ã‚ã‚’ä¸­å¿ƒç‚¹ã¨è¦‹ãªã™ï¼‰
 					*gfx3d_buffer = color_rgba8888.Color;
 				
 				if( ( (remainder_x != 0) && ( remainder_x != (RENDER_MAGNIFICATION - 1) ) ) || ( (remainder_y != 0) && ( remainder_y != (RENDER_MAGNIFICATION - 1) ) ) ) continue;
@@ -4317,11 +4317,11 @@ namespace X432R
 					#ifdef WORDS_BIGENDIAN
 					*gfx3d_buffer = BGRA8888_32_To_RGBA6665_32(color_rgba8888.Color);
 					#else
-					*gfx3d_buffer = BGRA8888_32Rev_To_RGBA6665_32Rev(color_rgba8888.Color);	// ƒsƒNƒZƒ‹ƒtƒH[ƒ}ƒbƒg‚ğRGBA6665‚É•ÏŠ·‚µ‚Ä’l‚ğ•Û‘¶
+					*gfx3d_buffer = BGRA8888_32Rev_To_RGBA6665_32Rev(color_rgba8888.Color);	// ãƒ”ã‚¯ã‚»ãƒ«ãƒ•ã‚©ãƒ¼ãƒãƒƒãƒˆã‚’RGBA6665ã«å¤‰æ›ã—ã¦å€¤ã‚’ä¿å­˜
 					#endif
 				}
 				#else
-				// ŠÈˆÕNearestNeighborix2:2‰æ‘f‚Ì‰E‘¤, x3:3‰æ‘f‚Ì’†‰›, x4:4‰æ‘f‚Ì¶‚©‚ç2‚Â‚ß‚ğ’†S“_‚ÆŒ©‚È‚·j
+				// ç°¡æ˜“NearestNeighborï¼ˆx2:2ç”»ç´ ã®å³å´, x3:3ç”»ç´ ã®ä¸­å¤®, x4:4ç”»ç´ ã®å·¦ã‹ã‚‰2ã¤ã‚ã‚’ä¸­å¿ƒç‚¹ã¨è¦‹ãªã™ï¼‰
 				if( (remainder_x != 1) && (remainder_y != 1) ) continue;
 				
 				if( (color_rgba8888.A > 0xF0) && (color_rgba8888.A < 0xFF) )
