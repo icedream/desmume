@@ -2113,46 +2113,6 @@ void SoftAP_Reset()
 	SoftAP.seqNum = 0;
 }
 
-static bool SoftAP_IsDNSRequestToWFC(u16 ethertype, u8* body)
-{
-	// Check the various headers...
-	if (ntohs(ethertype) != 0x0800) return false;		// EtherType: IP
-	if (body[0] != 0x45) return false;					// Version: 4, header len: 5
-	if (body[9] != 0x11) return false;					// Protocol: UDP
-	if (ntohs(*(u16*)&body[22]) != 53) return false;	// Dest. port: 53 (DNS)
-	if (htons(ntohs(*(u16*)&body[28+2])) & 0x8000) return false;	// must be a query
-	
-	// Analyze each question
-	u16 numquestions = ntohs(*(u16*)&body[28+4]);
-	u32 curoffset = 28+12;
-	for (u16 curquestion = 0; curquestion < numquestions; curquestion++)
-	{
-		// Assemble the requested domain name
-		u8 bitlength = 0; char domainname[256] = "";
-		while ((bitlength = body[curoffset++]) != 0)
-		{
-			strncat(domainname, (const char*)&body[curoffset], bitlength);
-			
-			curoffset += bitlength;
-			if (body[curoffset] != 0)
-				strcat(domainname, ".");
-		}
-
-		// if the domain name contains nintendowifi.net
-		// it is most likely a WFC server
-		// (note, conntest.nintendowifi.net just contains a dummy HTML page and
-		// is used for connection tests, I think we can let this one slide)
-		if ((strstr(domainname, "nintendowifi.net") != NULL) && 
-			(strcmp(domainname, "conntest.nintendowifi.net") != 0))
-			return true;
-
-		// Skip the type and class - we don't care about that
-		curoffset += 4;
-	}
-
-	return false;
-}
-
 static void SoftAP_Deauthenticate()
 {
 	u32 packetLen = sizeof(SoftAP_DeauthFrame);
@@ -2270,12 +2230,6 @@ void SoftAP_SendPacket(u8 *packet, u32 len)
 			{
 				if (SoftAP.status != APStatus_Associated)
 					return;
-
-				if (SoftAP_IsDNSRequestToWFC(*(u16*)&packet[30], &packet[32]))
-				{
-					SoftAP_Deauthenticate();
-					return;
-				}
 
 				u32 epacketLen = ((len - 30 - 4) + 14);
 				u8 epacket[2048];
