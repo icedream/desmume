@@ -98,7 +98,7 @@ DWORD WINAPI SNDXA2Thread( LPVOID )
 		
 		#ifdef X432R_MENUITEMMOD_ENABLED
 		if(X432R::cpuPowerSavingEnabled)
-			Sleep(1);	// WaitForSingleObject()‚ÍCPUg—p—¦‚ğ‰º‚°‚é–ğ‚É‚Í—§‚½‚È‚¢‚Ì‚ÅSleep()‚ğÀs‚µ‚Ä‚µ‚Ü‚¤
+			Sleep(1);	// WaitForSingleObject()ã¯CPUä½¿ç”¨ç‡ã‚’ä¸‹ã’ã‚‹å½¹ã«ã¯ç«‹ãŸãªã„ã®ã§Sleep()ã‚’å®Ÿè¡Œã—ã¦ã—ã¾ã†
 		#endif
 	}
 	SetEvent(threadQuitEvent);
