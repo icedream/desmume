@@ -2009,7 +2009,7 @@ namespace X432R
 		delayedTouchUpTrigger = true;
 	}
 	
-	// TouchUp‚ğ1ƒtƒŒ[ƒ€’x‰„‚³‚¹‚é‚±‚Æ‚Åƒ^ƒbƒ`–³”½‰‚ğ–h~ (TOUCHEVENTF_DOWN‚ÆTOUCHEVENTF_UP‚ª‚Ù‚Ú“¯‚É”­¶‚·‚é‚½‚ß)
+	// TouchUpã‚’1ãƒ•ãƒ¬ãƒ¼ãƒ é…å»¶ã•ã›ã‚‹ã“ã¨ã§ã‚¿ãƒƒãƒç„¡åå¿œã‚’é˜²æ­¢ (TOUCHEVENTF_DOWNã¨TOUCHEVENTF_UPãŒã»ã¼åŒæ™‚ã«ç™ºç”Ÿã™ã‚‹ãŸã‚)
 	static inline void ExecDelayedTouchUp()
 	{
 		if( !delayedTouchUpTrigger ) return;
@@ -2023,8 +2023,8 @@ namespace X432R
 	}
 	
 	
-//	bool allowBackgroundHotkeys = false;				// ƒoƒbƒNƒOƒ‰ƒEƒ“ƒh‚ÌƒzƒbƒgƒL[“ü—Í‚Ì—LŒø^–³Œø
-//	bool allowBackgroundKeyboardHotkeys = false;		// ƒoƒbƒNƒOƒ‰ƒEƒ“ƒh‚ÌƒL[ƒ{[ƒh‚©‚ç‚ÌƒzƒbƒgƒL[“ü—Í‚Ì—LŒø^–³Œø
+//	bool allowBackgroundHotkeys = false;				// ãƒãƒƒã‚¯ã‚°ãƒ©ã‚¦ãƒ³ãƒ‰æ™‚ã®ãƒ›ãƒƒãƒˆã‚­ãƒ¼å…¥åŠ›ã®æœ‰åŠ¹ï¼ç„¡åŠ¹
+//	bool allowBackgroundKeyboardHotkeys = false;		// ãƒãƒƒã‚¯ã‚°ãƒ©ã‚¦ãƒ³ãƒ‰æ™‚ã®ã‚­ãƒ¼ãƒœãƒ¼ãƒ‰ã‹ã‚‰ã®ãƒ›ãƒƒãƒˆã‚­ãƒ¼å…¥åŠ›ã®æœ‰åŠ¹ï¼ç„¡åŠ¹
 	
 	void HandleHotkeys()
 	{
@@ -2058,7 +2058,7 @@ namespace X432R
 			{
 				case VK_MENU:
 //					key_pressed = alt_pressed && !control_pressed && !shift_pressed;
-					key_pressed = alt_pressed;		// Alt, Control, Shift‚Í‘¼‚Ìƒ‚ƒfƒBƒtƒ@ƒCƒAƒL[‚Æ‘g‚İ‡‚í‚¹‚½ƒzƒbƒgƒL[“o˜^‚ª‚Å‚«‚È‚¢‚½‚ß‚±‚ê‚ÅOK
+					key_pressed = alt_pressed;		// Alt, Control, Shiftã¯ä»–ã®ãƒ¢ãƒ‡ã‚£ãƒ•ã‚¡ã‚¤ã‚¢ã‚­ãƒ¼ã¨çµ„ã¿åˆã‚ã›ãŸãƒ›ãƒƒãƒˆã‚­ãƒ¼ç™»éŒ²ãŒã§ããªã„ãŸã‚ã“ã‚Œã§OK
 					break;
 				
 				case VK_CONTROL:
@@ -2090,7 +2090,7 @@ namespace X432R
 				if(customkey->handleKeyDown != NULL)
 				{
 					customkey->handleKeyDown(customkey->param, true);
-					break;		// d•¡Š„‚è“–‚Ä‚³‚ê‚½ƒzƒbƒgƒL[‚ğ–³‹‚·‚é
+					break;		// é‡è¤‡å‰²ã‚Šå½“ã¦ã•ã‚ŒãŸãƒ›ãƒƒãƒˆã‚­ãƒ¼ã‚’ç„¡è¦–ã™ã‚‹
 				}
 			}
 			else if( !key_pressed && last_pressed )
@@ -2123,7 +2123,7 @@ namespace X432R
 	#endif
 	
 	
-	// ƒ{ƒŠƒ…[ƒ€‚ğ0‚É‚·‚é‚¾‚¯
+	// ãƒœãƒªãƒ¥ãƒ¼ãƒ ã‚’0ã«ã™ã‚‹ã ã‘
 	static void ChangeSoundEnabled(bool enable)
 	{
 		SPU_SetVolume(enable ? sndvolume : 0);
@@ -2334,7 +2334,7 @@ namespace X432R
 	}
 	
 	
-	//---------- MainThread—p ----------
+	//---------- MainThreadç”¨ ----------
 	
 	static void UpdateFrontBuffer()
 	{
@@ -2359,7 +2359,7 @@ namespace X432R
 		timeCounter_LockMain.Start();
 		#endif
 		
-		Lock lock(customFrontBufferSync);		// ƒXƒR[ƒv‚ğ”²‚¯‚Ä‚±‚ÌƒCƒ“ƒXƒ^ƒ“ƒX‚ÌƒfƒXƒgƒ‰ƒNƒ^‚ªŒÄ‚Î‚ê‚é‚Æ©“®“I‚ÉƒƒbƒN‚ª‰ğœ‚³‚ê‚é
+		Lock lock(customFrontBufferSync);		// ã‚¹ã‚³ãƒ¼ãƒ—ã‚’æŠœã‘ã¦ã“ã®ã‚¤ãƒ³ã‚¹ã‚¿ãƒ³ã‚¹ã®ãƒ‡ã‚¹ãƒˆãƒ©ã‚¯ã‚¿ãŒå‘¼ã°ã‚Œã‚‹ã¨è‡ªå‹•çš„ã«ãƒ­ãƒƒã‚¯ãŒè§£é™¤ã•ã‚Œã‚‹
 		
 		#ifdef X432R_PROCESSTIME_CHECK
 		timeCounter_LockMain.Stop();
@@ -2443,7 +2443,7 @@ namespace X432R
 	}
 	
 	
-	//---------- DisplayThread—p ----------
+	//---------- DisplayThreadç”¨ ----------
 	
 	static inline bool IsHudVisible()
 	{
@@ -2575,7 +2575,7 @@ namespace X432R
 		memset( &effect, 0, sizeof(DDBLTFX) );
 		effect.dwSize = sizeof(DDBLTFX);
 		
-		effect.dwFillColor = ScreenGapColor;		// 32bppŠÂ‹«‚Ì‚İl—¶
+		effect.dwFillColor = ScreenGapColor;		// 32bppç’°å¢ƒã®ã¿è€ƒæ…®
 		
 		surface->Blt(&rect, NULL, NULL, DDBLT_COLORFILL | DDBLT_WAIT, &effect);
 	}
@@ -2837,7 +2837,7 @@ namespace X432R
 		#endif
 		
 		
-		// ì¬‰Â”\‚ÈÅ‘åƒeƒNƒXƒ`ƒƒƒTƒCƒY‚ğƒ`ƒFƒbƒN
+		// ä½œæˆå¯èƒ½ãªæœ€å¤§ãƒ†ã‚¯ã‚¹ãƒãƒ£ã‚µã‚¤ã‚ºã‚’ãƒã‚§ãƒƒã‚¯
 		static int max_texture_size = 0;
 		
 		if(max_texture_size == 0)
@@ -2865,7 +2865,7 @@ namespace X432R
 		const int window_height = client_rect.bottom - client_rect.top;
 		
 		
-		// ‰æ–Ê•`‰æ—pƒeƒNƒXƒ`ƒƒ¶¬
+		// ç”»é¢æç”»ç”¨ãƒ†ã‚¯ã‚¹ãƒãƒ£ç”Ÿæˆ
 		glPixelStorei(GL_UNPACK_ALIGNMENT, 4);
 		
 		if(hudTexture == 0)
@@ -2885,7 +2885,7 @@ namespace X432R
 		{
 			lastRenderMagnification = RENDER_MAGNIFICATION;
 			
-			glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, TEXTURE_WIDTH, TEXTURE_HEIGHT, 0, GL_BGRA, GL_UNSIGNED_BYTE, NULL);		// ƒf[ƒ^‚ğ“]‘—‚¹‚¸‚É—Ìˆæ‚¾‚¯Šm•Û
+			glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, TEXTURE_WIDTH, TEXTURE_HEIGHT, 0, GL_BGRA, GL_UNSIGNED_BYTE, NULL);		// ãƒ‡ãƒ¼ã‚¿ã‚’è»¢é€ã›ãšã«é ˜åŸŸã ã‘ç¢ºä¿
 		}
 		
 		static bool is_highreso_upper = false;
@@ -2935,7 +2935,7 @@ namespace X432R
 		}
 		
 		
-		// ƒeƒNƒXƒ`ƒƒÀ•W¶¬
+		// ãƒ†ã‚¯ã‚¹ãƒãƒ£åº§æ¨™ç”Ÿæˆ
 		static const float default_texvert[2][8] =
 		{
 			{
@@ -3014,7 +3014,7 @@ namespace X432R
 		}
 		
 		
-		// ƒ|ƒŠƒSƒ“À•W”z—ñ¶¬
+		// ãƒãƒªã‚´ãƒ³åº§æ¨™é…åˆ—ç”Ÿæˆ
 		const u32 upperscreen_index = screen_swap ? 1 : 0;
 		const u32 lowerscreen_index = screen_swap ? 0 : 1;
 		const RECT screen_rect[] = {MainScreenRect, SubScreenRect};
@@ -3042,7 +3042,7 @@ namespace X432R
 		};
 		
 		
-		// •`‰æŠJn
+		// æç”»é–‹å§‹
 		const RGBA8888 clearcolor = (u32)ScreenGapColor;
 		const GLuint texture_filter = ( GetStyle() & DWS_FILTER ) ? GL_LINEAR : GL_NEAREST;
 		
@@ -3068,7 +3068,7 @@ namespace X432R
 		glLoadIdentity();
 		
 		glClearColor( (float)clearcolor.R / 255.0f, (float)clearcolor.G / 255.0f, (float)clearcolor.B / 255.0f, 1.0f );
-		glClear(GL_COLOR_BUFFER_BIT);				// Viewport‘S‘Ì‚ğScreen Gap‚ÌF‚ÅƒNƒŠƒA
+		glClear(GL_COLOR_BUFFER_BIT);				// Viewportå…¨ä½“ã‚’Screen Gapã®è‰²ã§ã‚¯ãƒªã‚¢
 		
 		glTexEnvi(GL_TEXTURE_ENV, GL_TEXTURE_ENV_MODE, GL_REPLACE);
 		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, texture_filter);
@@ -3321,9 +3321,9 @@ void displayThread(void*)
 		#ifdef X432R_MENUITEMMOD_ENABLED
 		if( X432R::cpuPowerSavingEnabled && ( emu_paused || !execute || !romloaded ) )
 		{
-			Sleep(200);		// WaitForSingleObject()‚ÍCPUg—p—¦‚ğ‰º‚°‚é–ğ‚É‚Í—§‚½‚È‚¢‚Ì‚ÅSleep()‚ğÀs‚µ‚Ä‚µ‚Ü‚¤
+			Sleep(200);		// WaitForSingleObject()ã¯CPUä½¿ç”¨ç‡ã‚’ä¸‹ã’ã‚‹å½¹ã«ã¯ç«‹ãŸãªã„ã®ã§Sleep()ã‚’å®Ÿè¡Œã—ã¦ã—ã¾ã†
 			
-			if( (MainWindow == NULL) || ( MainWindow->getHWnd() != GetForegroundWindow() ) ) continue;		// ƒEƒCƒ“ƒhƒE‚ªƒoƒbƒNƒOƒ‰ƒEƒ“ƒh‚È‚ç‰æ–Êo—Í‚ğÀs‚µ‚È‚¢
+			if( (MainWindow == NULL) || ( MainWindow->getHWnd() != GetForegroundWindow() ) ) continue;		// ã‚¦ã‚¤ãƒ³ãƒ‰ã‚¦ãŒãƒãƒƒã‚¯ã‚°ãƒ©ã‚¦ãƒ³ãƒ‰ãªã‚‰ç”»é¢å‡ºåŠ›ã‚’å®Ÿè¡Œã—ãªã„
 		}
 		#endif
 		
@@ -6251,7 +6251,7 @@ LRESULT CALLBACK WindowProcedure (HWND hwnd, UINT message, WPARAM wParam, LPARAM
 				WritePrivateProfileBool("X432R","WindowMaximized", window_maximized, IniName);
 				
 				if(window_maximized || fullscreen_mode)
-					ShowWindow(hwnd, SW_NORMAL);		// Å‘å‰»ó‘Ô‚ğ‰ğœ‚µ‚ÄSaveWindowSize()‚ğÀs‚Å‚«‚é‚æ‚¤‚É‚·‚éiƒtƒ‹ƒXƒNƒŠ[ƒ“ƒ‚[ƒh‚¾‚Æ‚¤‚Ü‚­“®ì‚µ‚È‚¢Hj
+					ShowWindow(hwnd, SW_NORMAL);		// æœ€å¤§åŒ–çŠ¶æ…‹ã‚’è§£é™¤ã—ã¦SaveWindowSize()ã‚’å®Ÿè¡Œã§ãã‚‹ã‚ˆã†ã«ã™ã‚‹ï¼ˆãƒ•ãƒ«ã‚¹ã‚¯ãƒªãƒ¼ãƒ³ãƒ¢ãƒ¼ãƒ‰ã ã¨ã†ã¾ãå‹•ä½œã—ãªã„ï¼Ÿï¼‰
 				#endif
 				
 				//Save window size
@@ -6503,7 +6503,7 @@ DOKEYDOWN:
 				ToggleFullscreen();
 				ForceRatio = oldForceRatio;
 				#else
-				ToggleFullscreen();		// ã‹L‚ÌƒRƒƒ“ƒg‚É‚æ‚é‚ÆA‚±‚Ì•ÏX‚É‚æ‚è•s‹ï‡‚ªo‚é‰Â”\«‚ª‚ ‚éH
+				ToggleFullscreen();		// ä¸Šè¨˜ã®ã‚³ãƒ¡ãƒ³ãƒˆã«ã‚ˆã‚‹ã¨ã€ã“ã®å¤‰æ›´ã«ã‚ˆã‚Šä¸å…·åˆãŒå‡ºã‚‹å¯èƒ½æ€§ãŒã‚ã‚‹ï¼Ÿ
 				#endif
 			}
 			else
@@ -6722,7 +6722,7 @@ DOKEYDOWN:
 	case WM_LBUTTONDBLCLK:
 		
 		#ifdef X432R_TOUCHINPUT_ENABLED
-		if( X432R::IsMouseEventFromTouch() ) return 0;			// ƒ^ƒbƒ`“ü—Í‚Å”­¶‚µ‚½ƒCƒxƒ“ƒg‚ğ–³‹
+		if( X432R::IsMouseEventFromTouch() ) return 0;			// ã‚¿ãƒƒãƒå…¥åŠ›ã§ç™ºç”Ÿã—ãŸã‚¤ãƒ™ãƒ³ãƒˆã‚’ç„¡è¦–
 		#endif
 		
 		if (wParam & MK_LBUTTON)
@@ -6753,7 +6753,7 @@ DOKEYDOWN:
 					x = clamp(x, 0, 255);
 					y = clamp(y, 0, 191);
 				}
-				else if( (x < 0) || (x > 255) || (y < 0) || (y > 191) ) return 0;		// ‰º‰æ–Ê‚Ì”ÍˆÍŠO‚Å”­¶‚µ‚½ƒ}ƒEƒXƒNƒŠƒbƒN‚ğ–³‹
+				else if( (x < 0) || (x > 255) || (y < 0) || (y > 191) ) return 0;		// ä¸‹ç”»é¢ã®ç¯„å›²å¤–ã§ç™ºç”Ÿã—ãŸãƒã‚¦ã‚¹ã‚¯ãƒªãƒƒã‚¯ã‚’ç„¡è¦–
 				#endif
 				
 				NDS_setTouchPos(x, y);
@@ -6771,7 +6771,7 @@ DOKEYDOWN:
 	case WM_LBUTTONUP:
 
 		#ifdef X432R_TOUCHINPUT_ENABLED
-		if( X432R::IsMouseEventFromTouch() ) return 0;			// ƒ^ƒbƒ`“ü—Í‚Å”­¶‚µ‚½ƒCƒxƒ“ƒg‚ğ–³‹
+		if( X432R::IsMouseEventFromTouch() ) return 0;			// ã‚¿ãƒƒãƒå…¥åŠ›ã§ç™ºç”Ÿã—ãŸã‚¤ãƒ™ãƒ³ãƒˆã‚’ç„¡è¦–
 		#endif
 
 		ReleaseCapture();
@@ -6818,7 +6818,7 @@ DOKEYDOWN:
 					touch_x = clamp(touch_x, 0, 255);
 					touch_y = clamp(touch_y, 0, 191);
 				}
-				else if( (touch_x < 0) || (touch_x > 255) || (touch_y < 0) || (touch_y > 191) ) return 0;	// ‰º‰æ–Ê‚Ì”ÍˆÍŠO‚Å”­¶‚µ‚½TOUCHEVENTF_DOWN‚ğ–³‹
+				else if( (touch_x < 0) || (touch_x > 255) || (touch_y < 0) || (touch_y > 191) ) return 0;	// ä¸‹ç”»é¢ã®ç¯„å›²å¤–ã§ç™ºç”Ÿã—ãŸTOUCHEVENTF_DOWNã‚’ç„¡è¦–
 				
 				NDS_setTouchPos(touch_x, touch_y);
 				winLastTouch.x = touch_x;
@@ -7434,7 +7434,7 @@ DOKEYDOWN:
 			if (video.layout == 1) return 0;
 			
 			#ifdef X432R_CUSTOMRENDERER_ENABLED
-			SetRotate(hwnd, 0);		// ‚‰ğ‘œ“xƒŒƒ“ƒ_ƒ‰g—pArotate‚ª0ˆÈŠO‚Ì‚ÉHorizontal‚ğ‘I‘ğ‚·‚é‚Æ•`‰æˆÊ’u‚ª‚¨‚©‚µ‚­‚È‚éH
+			SetRotate(hwnd, 0);		// é«˜è§£åƒåº¦ãƒ¬ãƒ³ãƒ€ãƒ©ä½¿ç”¨æ™‚ã€rotateãŒ0ä»¥å¤–ã®æ™‚ã«Horizontalã‚’é¸æŠã™ã‚‹ã¨æç”»ä½ç½®ãŒãŠã‹ã—ããªã‚‹ï¼Ÿ
 			#endif
 			
 			video.layout = 1;
