@@ -953,8 +953,9 @@ static void WIFI_PreTXAdjustments(u32 slot)
 	}*/
 
 	// Calculate and set FCS
-	u32 crc32 = WIFI_calcCRC32((u8*)&wifiMac.RAM[address + 6], txLen - 4);
-	*(u32*)&wifiMac.RAM[address + 6 + ((txLen/*-4*/) >> 1)] = crc32;
+	u32 crc32 = WIFI_calcCRC32((u8*)&wifiMac.RAM[address + 6], txLen - 2);
+	WIFI_LOG(3, "WIFI_PreTXAdjustments txLen = %08X offset = %08X\r\n", txLen, (address + 5 + ((txLen) >> 1)) << 1);
+	*(u32*)&wifiMac.RAM[address + 5 + (txLen >> 1)] = crc32;
 }
 
 void WIFI_write16(u32 address, u16 val)
@@ -2168,6 +2169,7 @@ void SoftAP_SendPacket(u8 *packet, u32 len)
 				{
 					packetLen = sizeof(SoftAP_ProbeResponse);
 					rpacket = new u8[12 + packetLen];
+					memset(rpacket, '\0', 12 + packetLen);
 					memcpy(&rpacket[12], SoftAP_ProbeResponse, packetLen);
 
 					// Add the timestamp
@@ -2179,6 +2181,7 @@ void SoftAP_SendPacket(u8 *packet, u32 len)
 				{
 					packetLen = sizeof(SoftAP_AuthFrame);
 					rpacket = new u8[12 + packetLen];
+					memset(rpacket, '\0', 12 + packetLen);
 					memcpy(&rpacket[12], SoftAP_AuthFrame, packetLen);
 
 					SoftAP.status = APStatus_Authenticated;
@@ -2192,6 +2195,7 @@ void SoftAP_SendPacket(u8 *packet, u32 len)
 
 					packetLen = sizeof(SoftAP_AssocResponse);
 					rpacket = new u8[12 + packetLen];
+					memset(rpacket, '\0', 12 + packetLen);
 					memcpy(&rpacket[12], SoftAP_AssocResponse, packetLen);
 
 					SoftAP.status = APStatus_Associated;
