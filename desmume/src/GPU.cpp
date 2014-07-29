@@ -3093,7 +3093,7 @@ namespace X432R
 	{
 		if( (vram_block > 3) || ( !vramIsValid[vram_block] ) ) return;
 		
-//		memset( highResolutionBuffer_Vram[vram_block], 0, sizeof( highResolutionBuffer_Vram[vram_block] ) );		// ƒoƒbƒtƒ@‚ğƒNƒŠƒA‚µ‚È‚­‚Ä‚à‚½‚Ô‚ñ–â‘è‚È‚µ
+//		memset( highResolutionBuffer_Vram[vram_block], 0, sizeof( highResolutionBuffer_Vram[vram_block] ) );		// No problem perhaps without clearing the buffer
 		
 		vramIsValid[vram_block] = false;
 		
@@ -3116,7 +3116,7 @@ namespace X432R
 			alpha = screen->gpu->MasterBrightFactor;
 			
 //			if( (alpha > 2) && (alpha < 0x1F) )
-			if(alpha > 2)		// ‹H‚ÉƒtƒF[ƒhŒø‰Ê‚ÌŒã‚ÉMasterBrightness‚ª0‚ÉƒŠƒZƒbƒg‚³‚ê‚Ä‚¢‚È‚¢ê‡‚ª‚ ‚é‚Ì‚Å2ˆÈ‰º‚ğ–³‹iÄŒ»“x‚Í’á‰º‚·‚éj
+			if(alpha > 2)		// Ignore 2 or less because there are rare cases where MasterBrightness is not reset to 0 after the fade effect (return counter decreases)
 			{
 				alpha = std::min<u32>(alpha * 16, 0xFF) << 24;
 				
@@ -3170,7 +3170,7 @@ namespace X432R
 		
 		return ( memcmp( sampled_vramdata, vramSampledPixelData[vram_block], sizeof(sampled_vramdata) ) == 0 );
 		
-		// MMU.cpp MMU_VRAMmapRefreshBank()‚ÅVRAM‚Ì•ÏX‚ğƒ`ƒFƒbƒN‚µAvramIsValid[]‚Éfalse‚ğƒZƒbƒg‚·‚ê‚Î‚±‚Ìˆ—‚Í•s—v‚É‚È‚é‚Í‚¸
+		// MMU.cpp If vramIsValid[] is set to false, it should become unnecessary to check the change of VRAM in MMU_VRAMmapRefreshBank()
 		
 		
 		#ifdef X432R_CUSTOMRENDERER_DEBUG
@@ -3184,7 +3184,7 @@ namespace X432R
 	{
 		if( !(bool)display_control->OBJ_Enable ) return false;
 		
-		// ƒsƒNƒZƒ‹ƒtƒH[ƒ}ƒbƒg‚ªdirect color(RGBA5551)Asource bitmap width‚ª256‚Éİ’è‚³‚ê‚Ä‚¢‚éê‡‚É‚Ì‚İ‚‰ğ‘œ“xVRAM‚ğOBJ‚Æ‚µ‚Ä•`‰æ
+		// Draw OBJ as high-resolution only when the pixel format is set to direct color (RGBA5551), and source bitmap width is set to 256
 		if( (display_control->OBJ_BMP_mapping != 0) || (display_control->OBJ_BMP_2D_dim != 1) ) return false;
 		
 		_OAM_ sprite_info;
@@ -3255,9 +3255,7 @@ namespace X432R
 	
 	inline bool HighResolutionFramebuffers::CheckBGParams(const GPU * const gpu, const u32 layer_num)
 	{
-		assert( (layer_num == 2) || (layer_num == 3) );
-		
-		// ƒsƒNƒZƒ‹ƒtƒH[ƒ}ƒbƒg‚ªdirect color(RGBA5551)‚Éİ’è‚³‚ê‚Ä‚¢‚éê‡‚É‚Ì‚İ‚‰ğ‘œ“xVRAM‚ğBG2/BG3‚Æ‚µ‚Ä•`‰æ
+		// ãƒ”ã‚¯ã‚»ãƒ«ãƒ•ã‚©ãƒ¼ãƒãƒƒãƒˆãŒdirect color(RGBA5551)ã«è¨­å®šã•ã‚Œã¦ã„ã‚‹å ´åˆã«ã®ã¿é«˜è§£åƒåº¦VRAMã‚’BG2/BG3ã¨ã—ã¦æç”»
 		if( ( gpu->BGTypes[layer_num] != BGType_AffineExt_Direct ) || ( gpu->BGSize[layer_num][0] != 256 ) || ( gpu->BGSize[layer_num][1] != 256 ) ) return false;
 		
 		return true;
@@ -3286,15 +3284,15 @@ namespace X432R
 		
 		else
 		{
-			// —Dæ“x‚Ì’á‚¢•û‚ÉŠ„‚è“–‚Ä‚ç‚ê‚Ä‚¢‚é‚Æ‘z’è
+			// å„ªå…ˆåº¦ã®ä½ã„æ–¹ã«å‰²ã‚Šå½“ã¦ã‚‰ã‚Œã¦ã„ã‚‹ã¨æƒ³å®š
 			const u8 bg2_priority = gpu->bgPrio[2];
 			const u8 bg3_priority = gpu->bgPrio[3];
 			
 			if(bg3_priority == bg3_priority)
-				layer_num = 3;											// priority‚ª“¯‚¶‚È‚çBGnum‚ª‘å‚«‚¢•û‚ª—Dæ“x‚ª’á‚¢
+				layer_num = 3;											// priorityãŒåŒã˜ãªã‚‰BGnumãŒå¤§ãã„æ–¹ãŒå„ªå…ˆåº¦ãŒä½ã„
 			
 			else
-				layer_num = (bg2_priority < bg3_priority) ? 3 : 2;		// priority‚Ì’l‚ª‘å‚«‚¢•û‚ª—Dæ“x‚ª’á‚¢
+				layer_num = (bg2_priority < bg3_priority) ? 3 : 2;		// priorityã®å€¤ãŒå¤§ãã„æ–¹ãŒå„ªå…ˆåº¦ãŒä½ã„
 		}
 		
 		
@@ -3400,7 +3398,7 @@ namespace X432R
 					if( !IsVramValid(i) || !UpdateHighResolutionBGNum(MainScreen.gpu, displaycontrol_main, mainScreenIndex) ) break;
 					
 					#if !defined(X432R_LAYERPOSITIONOFFSET_TEST2) || !defined(X432R_HIGHRESO_BG_OBJ_ROTSCALE_TEST)
-					if( !CheckBGOffset(mainScreenIndex) )		// ‚‰ğ‘œ“xBG/OBJ‚ğ•`‰æ‚µ‚È‚¢‚ªAVRAM‚Ì“à—e‚ÍƒNƒŠƒA‚¹‚¸‚É•Û‚µ‚Ä‚¨‚­
+					if( !CheckBGOffset(mainScreenIndex) )		// é«˜è§£åƒåº¦BG/OBJã‚’æç”»ã—ãªã„ãŒã€VRAMã®å†…å®¹ã¯ã‚¯ãƒªã‚¢ã›ãšã«ä¿æŒã—ã¦ãŠã
 					{
 						highResolutionBGNum[mainScreenIndex] = 0xFF;
 						continue;
@@ -3738,7 +3736,7 @@ namespace X432R
 					if(color_rgba8888 == 0)
 						color_rgba8888 = background_rgba8888;
 					else
-						*highreso_buffer = 0;			// ŸƒtƒŒ[ƒ€‚Ì‚½‚ß‚É’l‚ğƒNƒŠƒA‚µ‚Ä‚¨‚­
+						*highreso_buffer = 0;			// æ¬¡ãƒ•ãƒ¬ãƒ¼ãƒ ã®ãŸã‚ã«å€¤ã‚’ã‚¯ãƒªã‚¢ã—ã¦ãŠã
 					
 					++highreso_buffer;
 					
@@ -3980,7 +3978,7 @@ namespace X432R
 			UpdateGpuParams();
 			
 			if(mainGpuBG03DEnabled)
-				gpu3D->NDS_3D_RenderFinish();			// GPU_RenderLine_Layer()‚ÌÅ‰‚ÉÀs‚µ‚Ä‚¨‚­
+				gpu3D->NDS_3D_RenderFinish();			// GPU_RenderLine_Layer()ã®æœ€åˆã«å®Ÿè¡Œã—ã¦ãŠã
 			
 			currentFrameRendered = true;
 			renderLine_CurrentRenderWidth = 256 * renderLine_CurrentRenderMagnification;
@@ -4282,10 +4280,10 @@ namespace X432R
 					default:
 						if(color_rgba8888 == 0) continue;
 						
-						*highreso_buffer = color_rgba8888 | 0xFF000000;		// Enable Anti-Aliasing—LŒø‚É2D‚Æ3D‚Ì‹«ŠE•”•ª‚ª‰˜‚­‚È‚éê‡‚ª‚ ‚é
+						*highreso_buffer = color_rgba8888 | 0xFF000000;		// Enable Anti-Aliasingæœ‰åŠ¹æ™‚ã«2Dã¨3Dã®å¢ƒç•Œéƒ¨åˆ†ãŒæ±šããªã‚‹å ´åˆãŒã‚ã‚‹
 						break;
 					#else
-					default:												// íƒAƒ‹ƒtƒ@ƒuƒŒƒ“ƒh—LŒø
+					default:												// å¸¸æ™‚ã‚¢ãƒ«ãƒ•ã‚¡ãƒ–ãƒ¬ãƒ³ãƒ‰æœ‰åŠ¹
 						alpha = color_rgba8888 >> (24 + 4);
 						
 						if(alpha == 0) continue;
@@ -4315,7 +4313,7 @@ namespace X432R
 			renderLine_ForegroundBuffer[x] = color_rgba8888 | 0xFF000000;
 		else
 		{
-			// foreground‚É”¼“§–¾F‚ª2‰ñ•`‰æ‚³‚ê‚½ê‡‚É³‚µ‚¢•\¦‚ªs‚¦‚È‚¢–â‘è‚ ‚è
+			// foregroundã«åŠé€æ˜è‰²ãŒ2å›æç”»ã•ã‚ŒãŸå ´åˆã«æ­£ã—ã„è¡¨ç¤ºãŒè¡Œãˆãªã„å•é¡Œã‚ã‚Š
 			u32 * const foreground_buffer = renderLine_ForegroundBuffer + x;
 			
 			if( (LAYER == SOURCELAYER_OBJ) && (alpha < 255) )
