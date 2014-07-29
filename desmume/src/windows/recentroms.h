@@ -23,7 +23,12 @@
 
 #include "main.h"
 
+#ifndef X432R_MENUITEMMOD_ENABLED
 static const unsigned int MAX_RECENT_ROMS = 10;	//To change the recent rom max, simply change this number
+#else
+static const unsigned int MAX_RECENT_ROMS = 30;
+#endif
+
 static const unsigned int recentRoms_clearid = IDM_RECENT_RESERVED0;			// ID for the Clear recent ROMs item
 static const unsigned int recentRoms_baseid = IDM_RECENT_RESERVED1;			//Base identifier for the recent ROMs items
 

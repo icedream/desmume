@@ -1594,6 +1594,11 @@ BEGIN
             MENUITEM SEPARATOR
             MENUITEM "&Always On Top",              IDM_ALWAYS_ON_TOP
             MENUITEM "&Lockdown",                   IDM_LOCKDOWN
+			
+			#ifdef X432R_MENUITEMMOD_ENABLED
+			MENUITEM "&No Resize",					X432R_MENUITEM_NORESIZE
+			#endif
+			
         END
         POPUP "Screen &Gap"
         BEGIN
@@ -1633,10 +1638,15 @@ BEGIN
             MENUITEM "4xBRZ",                       IDM_RENDER_4XBRZ
             MENUITEM "5xBRZ",                       IDM_RENDER_5XBRZ
         END
-        MENUITEM "&Maintain Asect Ratio",       IDC_FORCERATIO
+        MENUITEM "&Maintain Aspect Ratio",      IDC_FORCERATIO
         MENUITEM "&Pad To Integer",             IDC_VIEW_PADTOINTEGER
         MENUITEM SEPARATOR
         MENUITEM "Show &Toolbar",               IDM_SHOWTOOLBAR
+		
+		#ifdef X432R_MENUITEMMOD_ENABLED2
+		MENUITEM "Show Menubar in Full-Screen Mode",	X432R_MENUITEM_SHOWMENUBAR_IN_FULLSCREEN
+		#endif
+		
         MENUITEM SEPARATOR
         POPUP "&HUD"
         BEGIN
@@ -1713,9 +1723,48 @@ BEGIN
                 MENUITEM "Force As Current",            IDC_SAVETYPE_FORCE
             END
         END
+		
+		#if defined(X432R_MENUITEMMOD_ENABLED) || defined(X432R_CUSTOMRENDERER_ENABLED)
+		MENUITEM SEPARATOR
+		#endif
+		
+		#ifdef X432R_MENUITEMMOD_ENABLED
+		MENUITEM "SoftRasterizer",				X432R_MENUITEM_SOFTRASTERIZER
+		#ifdef X432R_OPENGL_TEXTUREFILTER_ENABLED
+		MENUITEM "Textuer Filter",				X432R_MENUITEM_OPENGL_TEXTUREFILTER
+		#endif
+		#endif
+		
+		#ifdef X432R_CUSTOMRENDERER_ENABLED
+		POPUP "High-Resolution 3D Renderer"
+		BEGIN
+			MENUITEM "Disabled (256x192)",				X432R_MENUITEM_CHANGERESOLUTION_X1
+			MENUITEM "X2 (512x384)",					X432R_MENUITEM_CHANGERESOLUTION_X2
+			MENUITEM "X3 (768x576)",					X432R_MENUITEM_CHANGERESOLUTION_X3
+			MENUITEM "X4 (1024x768)",					X432R_MENUITEM_CHANGERESOLUTION_X4
+			#ifdef X432R_CUSTOMRENDERER_DEBUG
+			MENUITEM SEPARATOR
+			MENUITEM "Debug Mode"						X432R_MENUITEM_ENABLEDEBUGMODE
+			#endif
+    END
+		#endif
+		
+		#ifdef X432R_MENUITEMMOD_ENABLED
+		MENUITEM "Sound Output",					X432R_MENUITEM_SOUNDOUTPUT
+		MENUITEM "CPU Power Saving",				X432R_MENUITEM_CPUPOWERSAVING
+		#endif
     END
     POPUP "&Tools"
     BEGIN
+		#ifdef X432R_MENUITEMMOD_ENABLED
+		MENUITEM "Disable &Cheats",				IDM_CHEATS_DISABLE
+		MENUITEM "Cheats &List",				IDM_CHEATS_LIST, INACTIVE
+		MENUITEM "Cheats &Search",				IDM_CHEATS_SEARCH, INACTIVE
+		MENUITEM "RAM Watch...",				ID_RAM_WATCH
+		MENUITEM "RAM Search...",				ID_RAM_SEARCH
+		MENUITEM SEPARATOR
+		#endif
+		
         MENUITEM "&Disassembler",               IDM_DISASSEMBLER
         MENUITEM "View &Memory",                IDM_MEMORY
         MENUITEM "View &Registers",             IDM_IOREG
@@ -1728,7 +1777,15 @@ BEGIN
         MENUITEM "View &Sound State",           IDM_SOUND_VIEW
         MENUITEM "View Nitro&FS",               ID_TOOLS_VIEWFSNITRO
         MENUITEM SEPARATOR
+		
+		#ifdef X432R_MENUITEMMOD_ENABLED
+		MENUITEM "Show Console",				X432R_MENUITEM_SHOWCONSOLE
+		MENUITEM "Console Always On Top",		IDM_CONSOLE_ALWAYS_ON_TOP
+		#else
         MENUITEM "&Console Always On Top",      IDM_CONSOLE_ALWAYS_ON_TOP
+		#endif
+		
+		#ifndef X432R_MENUITEMMOD_ENABLED
         POPUP "&Cheats"
         BEGIN
             MENUITEM "&List",                       IDM_CHEATS_LIST, INACTIVE
@@ -1738,6 +1795,8 @@ BEGIN
         END
         MENUITEM "RAM Watch...",                ID_RAM_WATCH
         MENUITEM "RAM Search...",               ID_RAM_SEARCH
+		#endif
+		
         MENUITEM SEPARATOR
         POPUP "&View Layers"
         BEGIN

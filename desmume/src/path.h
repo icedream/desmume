@@ -37,6 +37,17 @@
 #include "time.h"
 #include "utils/xstring.h"
 
+
+//---CUSTOM--->
+#include "X432R_BuildSwitch.h"
+
+#if defined(X432R_FILEPATHMOD_ENABLED) && defined(HOST_WINDOWS)
+#include <shlwapi.h>
+#include <mbstring.h>
+#endif
+//<---CUSTOM---
+
+
 #ifdef HOST_WINDOWS
 #define FILE_EXT_DELIMITER_CHAR		'.'
 #define DIRECTORY_DELIMITER_CHAR	'\\'
@@ -125,8 +136,15 @@ public:
 		path = std::string(filename);
 
 		//extract the internal part of the logical rom name
+		#if !defined(X432R_FILEPATHMOD_ENABLED) || !defined(HOST_WINDOWS)
 		std::vector<std::string> parts = tokenize_str(filename,"|");
 		SetRomName(parts[parts.size()-1].c_str());
+		#else
+		const char * const name = (char *)_mbschr( (unsigned char *)filename, '|' );
+		
+		SetRomName( (name == NULL) ? filename : (name + 1) );
+		#endif
+		
 		LoadModulePath();
 #if !defined(WIN32) && !defined(DESMUME_COCOA)
 		ReadPathSettings();

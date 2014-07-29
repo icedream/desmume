@@ -367,6 +367,10 @@ void HK_ToggleReadOnly(int, bool justPressed) {
 	else
 		osd->setLineColor(255,255,255);
 	osd->addLine(msg);
+	
+	#ifdef X432R_MENUITEMMOD_ENABLED
+	osd->setLineColor(255, 255, 255);
+	#endif
 }
 
 void HK_PlayMovie(int, bool justPressed) 
@@ -472,11 +476,53 @@ void HK_FrameAdvanceKeyDown(int, bool justPressed) { FrameAdvance(true); }
 void HK_FrameAdvanceKeyUp(int) { FrameAdvance(false); }
 
 void HK_ToggleRasterizer(int, bool justPressed) { 
+	#ifndef X432R_CUSTOMRENDERER_ENABLED
 	if(cur3DCore == GPU3D_OPENGL_OLD || cur3DCore == GPU3D_OPENGL_3_2)
 		cur3DCore = GPU3D_SWRAST;
 	else cur3DCore = GPU3D_OPENGL_3_2;
 
 	Change3DCoreWithFallbackAndSave(cur3DCore);
+	#else
+	switch(cur3DCore)
+	{
+		case GPU3D_NULL:
+			return;
+		
+		case GPU3D_SWRAST:
+			cur3DCore = GPU3D_OPENGL_3_2;
+			break;
+		
+		case GPU3D_SWRAST_X2:
+			cur3DCore = GPU3D_OPENGL_X2;
+			break;
+		
+		case GPU3D_SWRAST_X3:
+			cur3DCore = GPU3D_OPENGL_X3;
+			break;
+		
+		case GPU3D_SWRAST_X4:
+			cur3DCore = GPU3D_OPENGL_X4;
+			break;
+		
+		case GPU3D_OPENGL_X2:
+			cur3DCore = GPU3D_SWRAST_X2;
+			break;
+		
+		case GPU3D_OPENGL_X3:
+			cur3DCore = GPU3D_SWRAST_X3;
+			break;
+		
+		case GPU3D_OPENGL_X4:
+			cur3DCore = GPU3D_SWRAST_X4;
+			break;
+		
+		default:
+			cur3DCore = GPU3D_SWRAST;
+			break;
+	}
+	
+	Change3DCoreWithFallbackAndSave(cur3DCore);
+	#endif
 }
 
 void HK_IncreasePressure(int, bool justPressed) {
@@ -529,6 +575,10 @@ void InitCustomKeys (SCustomKeys *keys)
 		key.handleKeyUp = NULL;
 		key.page = NUM_HOTKEY_PAGE;
 		key.param = 0;
+
+		#ifdef X432R_TOUCHINPUT_ENABLED
+		key.keyPressed = false;
+		#endif
 
 		//keys->key[i].timing = PROCESS_NOW;
 		i++;
@@ -686,6 +736,14 @@ void InitCustomKeys (SCustomKeys *keys)
 	keys->QuickPrintScreen.page = HOTKEY_PAGE_TOOLS;
 	keys->QuickPrintScreen.key = VK_F12;
 	keys->QuickPrintScreen.modifiers = CUSTKEY_CTRL_MASK;
+
+	#ifdef X432R_MENUITEMMOD_ENABLED
+	keys->ToggleSoundEnabled.handleKeyDown = X432R::HK_ToggleSoundEnabledKeyDown;
+	keys->ToggleSoundEnabled.code = "X432R:ToggleSoundEnabled";
+	keys->ToggleSoundEnabled.name = L"Toggle Sound Enabled";
+	keys->ToggleSoundEnabled.page = HOTKEY_PAGE_TOOLS;
+	keys->ToggleSoundEnabled.key = NULL;
+	#endif
 
 	keys->ToggleReadOnly.handleKeyDown = HK_ToggleReadOnly;
 	keys->ToggleReadOnly.code = "ToggleReadOnly";

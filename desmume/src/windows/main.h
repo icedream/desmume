@@ -20,6 +20,21 @@
 #define _MAIN_H_
 
 #include "CWindow.h"
+
+
+//---CUSTOM--->
+#include "X432R_BuildSwitch.h"
+#include <locale.h>
+
+namespace X432R
+{
+//	GLuint GetScreenTexture();
+	u32 GetScreenTexture();
+	void DeleteScreenTexture();
+}
+//<---CUSTOM---
+
+
 extern WINCLASS	*MainWindow;
 extern HINSTANCE hAppInst;
 extern HMENU mainMenu; //Holds handle to the main DeSmuME menu
@@ -51,6 +66,16 @@ extern bool ShowLagFrameCounter;
 #define GPU3D_OPENGL_3_2 1
 #define GPU3D_SWRAST 2
 #define GPU3D_OPENGL_OLD 3
+
+#ifdef X432R_CUSTOMRENDERER_ENABLED
+#define GPU3D_OPENGL_X2 4
+#define GPU3D_OPENGL_X3 5
+#define GPU3D_OPENGL_X4 6
+
+#define GPU3D_SWRAST_X2 7
+#define GPU3D_SWRAST_X3 8
+#define GPU3D_SWRAST_X4 9
+#endif
 
 static const int LANGUAGE_ENGLISH = 0;
 static const int LANGUAGE_FRENCH = 1;

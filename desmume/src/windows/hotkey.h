@@ -25,6 +25,12 @@
 #include <string>
 #include "../types.h"
 
+
+//---CUSTOM--->
+#include "X432R_BuildSwitch.h"
+//<---CUSTOM---
+
+
 enum HotkeyPage {
 	HOTKEY_PAGE_MAIN=0,
 	HOTKEY_PAGE_TOOLS,
@@ -61,6 +67,10 @@ struct SCustomKey
 	const char* code;
 	int param;
 	//HotkeyTiming timing;
+	
+	#ifdef X432R_TOUCHINPUT_ENABLED
+	bool keyPressed;
+	#endif
 };
 
 struct SCustomKeys
@@ -108,6 +118,11 @@ struct SCustomKeys
 	SCustomKey SearchCheats;
 	SCustomKey IncreaseVolume;
 	SCustomKey DecreaseVolume;
+	
+	#ifdef X432R_MENUITEMMOD_ENABLED
+	SCustomKey ToggleSoundEnabled;
+	#endif
+	
 	SCustomKey LastItem; // dummy, must be last
 
 	//--methods--

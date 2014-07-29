@@ -32,6 +32,14 @@
 #include "resource.h"
 #include "OpenArchive.h"
 
+//---CUSTOM--->
+#include "X432R_BuildSwitch.h"
+
+#ifdef X432R_FILEPATHMOD_ENABLED
+#include <mbstring.h>
+#endif
+//<---CUSTOM---
+
 static char Str_Tmp[1024];
 
 LRESULT CALLBACK ArchiveFileChooser(HWND hDlg, UINT uMsg, WPARAM wParam, LPARAM lParam);
@@ -405,7 +413,13 @@ bool ObtainFile(const char* Name, char *const & LogicalName, char *const & Physi
 	strcpy(LogicalName, Name);
 	strcpy(PhysicalName, Name);
 	strcpy(ArchivePaths, Name);
+	
+	#ifndef X432R_FILEPATHMOD_ENABLED
 	char* bar = strchr(ArchivePaths, '|');
+	#else
+	char *bar = (char *)_mbschr( (unsigned char *)ArchivePaths, '|' );
+	#endif
+	
 	if(bar)
 	{
 		PhysicalName[bar - ArchivePaths] = 0; // doesn't belong in the physical name
@@ -426,7 +440,12 @@ bool ObtainFile(const char* Name, char *const & LogicalName, char *const & Physi
 			bool forceManual = false;
 			if(bar && *bar) // try following the in-archive part of the logical path
 			{
+				#ifndef X432R_FILEPATHMOD_ENABLED
 				char* bar2 = strchr(bar, '|');
+				#else
+				char *bar2 = (char *)_mbschr( (unsigned char *)bar, '|' );
+				#endif
+				
 				if(bar2) *bar2++ = 0;
 				int numItems = archive.GetNumItems();
 				for(int i = 0; i < numItems; i++)

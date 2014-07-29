@@ -316,7 +316,10 @@ DWORD dwMainThread;
 HMENU mainMenu = NULL; //Holds handle to the main DeSmuME menu
 CToolBar* MainWindowToolbar;
 
+#ifndef X432R_TOUCHINPUT_ENABLED
 DWORD hKeyInputTimer;
+#endif
+
 bool start_paused;
 
 extern LRESULT CALLBACK RamSearchProc(HWND hDlg, UINT uMsg, WPARAM wParam, LPARAM lParam);
@@ -496,6 +499,16 @@ GPU3DInterface *core3DList[] = {
 	&gpu3Dgl_3_2,
 	&gpu3DRasterize,
 	&gpu3DglOld,
+	
+	#ifdef X432R_CUSTOMRENDERER_ENABLED
+	&X432R::gpu3Dgl_X2,
+	&X432R::gpu3Dgl_X3,
+	&X432R::gpu3Dgl_X4,
+	&X432R::gpu3DRasterize_X2,
+	&X432R::gpu3DRasterize_X3,
+	&X432R::gpu3DRasterize_X4,
+	#endif
+	
 	NULL
 };
 
@@ -548,6 +561,7 @@ LRESULT CALLBACK WifiSettingsDlgProc(HWND hDlg, UINT uMsg, WPARAM wParam, LPARAM
 static int KeyInDelayMSec = 0;
 static int KeyInRepeatMSec = 8;
 
+#ifndef X432R_TOUCHINPUT_ENABLED
 template<bool JOYSTICK>
 static void InputTimer()
 {
@@ -608,6 +622,7 @@ VOID CALLBACK KeyInputTimer( UINT idEvent, UINT uMsg, DWORD_PTR dwUser, DWORD_PT
 	InputTimer<false>();
 	InputTimer<true>();
 }
+#endif
 
 void ScaleScreen(float factor, bool user)
 {
@@ -863,11 +878,17 @@ const u32 DWS_OPENGL = 64;
 const u32 DWS_DISPMETHODS =  (DWS_DDRAW_SW|DWS_DDRAW_HW|DWS_OPENGL);
 const u32 DWS_FILTER = 128;
 
+#ifdef X432R_MENUITEMMOD_ENABLED
+const u32 DWS_NORESIZE = 256;
+#endif
+
 static u32 currWindowStyle = DWS_NORMAL;
+
 static void SetStyle(u32 dws)
 {
 	//pokefan's suggestion, there are a number of ways we could do this.
 	//i sort of like this because it is very visually indicative of being locked down
+	#ifndef X432R_MENUITEMMOD_ENABLED
 	DWORD ws = GetWindowLong(MainWindow->getHWnd(),GWL_STYLE);
 	ws &= ~(WS_CAPTION | WS_POPUP | WS_THICKFRAME | WS_DLGFRAME );
 	if(dws & DWS_LOCKDOWN)
@@ -882,6 +903,38 @@ static void SetStyle(u32 dws)
 		SetMenu(MainWindow->getHWnd(),NULL);
 	else 
 		SetMenu(MainWindow->getHWnd(),mainMenu);
+	#else
+	const HWND window_handle = MainWindow->getHWnd();
+	
+	DWORD ws = GetWindowLong(window_handle, GWL_STYLE) | WS_MINIMIZEBOX;
+	
+	ws &= ~(WS_CAPTION | WS_POPUP | WS_THICKFRAME | WS_DLGFRAME | WS_MAXIMIZEBOX);
+	
+	if( IsZoomed( MainWindow->getHWnd() ) && (dws & DWS_LOCKDOWN) ) return;
+	
+	if(dws & DWS_LOCKDOWN)
+		ws |= WS_POPUP | WS_DLGFRAME;
+	
+	else if( !(dws & DWS_FULLSCREEN) )
+	{
+		if(dws & DWS_NORESIZE)
+			ws |= WS_POPUP | WS_CAPTION | WS_MAXIMIZEBOX;
+		
+		else
+			ws |= WS_CAPTION | WS_THICKFRAME | WS_MAXIMIZEBOX;
+	}
+	
+	SetWindowLong(window_handle, GWL_STYLE, ws);
+	
+	#ifndef X432R_MENUITEMMOD_ENABLED2
+	if(dws & DWS_FULLSCREEN) 
+	#else
+	if( (dws & DWS_FULLSCREEN) && !X432R::showMenubarInFullScreen ) 
+	#endif
+		SetMenu(window_handle, NULL);
+	else 
+		SetMenu(window_handle, mainMenu);
+	#endif
 
 	currWindowStyle = dws;
 	HWND insertAfter = HWND_NOTOPMOST;
@@ -897,6 +950,12 @@ static void ToggleFullscreen()
 	u32 style = GetStyle();
 	style ^= DWS_FULLSCREEN;
 	SetStyle(style);
+	
+	#ifdef X432R_MENUITEMMOD_ENABLED2
+	if( IsZoomed( MainWindow->getHWnd() ) )
+		ShowWindow( MainWindow->getHWnd(), SW_NORMAL );
+	#endif
+	
 	if(style&DWS_FULLSCREEN)
 		ShowWindow(MainWindow->getHWnd(),SW_MAXIMIZE);
 	else ShowWindow(MainWindow->getHWnd(),SW_NORMAL);
@@ -1135,8 +1194,10 @@ void UpdateWndRects(HWND hwnd)
 
 	GetClientRect(hwnd, &rc);
 
+	#ifndef X432R_MENUITEMMOD_ENABLED2
 	if(maximized)
 		rc = FullScreenRect;
+	#endif
 	
 	tbheight = MainWindowToolbar->GetHeight();
 	
@@ -1562,10 +1623,13 @@ struct GLDISPLAY
 	}
 } gldisplay;
 
+
 #include <GL/gl.h>
 #include <GL/glext.h>
+
 static void OGL_DoDisplay()
 {
+	#ifndef X432R_CUSTOMRENDERER_ENABLED
 	if(!gldisplay.begin()) return;
 
 	static GLuint tex = 0;
@@ -1573,6 +1637,12 @@ static void OGL_DoDisplay()
 		glGenTextures(1,&tex);
 
 	glBindTexture(GL_TEXTURE_2D,tex);
+	#else
+	if( !gldisplay.begin() ) return;
+	
+	glBindTexture( GL_TEXTURE_2D, X432R::GetScreenTexture() );
+	#endif
+
 	glTexImage2D(GL_TEXTURE_2D,0,GL_RGBA, video.width,video.height,0,GL_BGRA,GL_UNSIGNED_BYTE,video.finalBuffer());
 
 	//the ds screen fills the texture entirely, so we dont have garbage at edge to worry about,
@@ -1871,10 +1941,1280 @@ static void DoDisplay_DrawHud()
 	osd->clear();
 }
 
+
+#ifdef X432R_TOUCHINPUT_ENABLED
+namespace X432R
+{
+	static BOOL (__stdcall *RegisterTouchWindowProc)(HWND, ULONG) = NULL;
+	static BOOL (__stdcall *UnregisterTouchWindowProc)(HWND) = NULL;
+	static BOOL (__stdcall *GetTouchInputInfoProc)(HTOUCHINPUT, UINT, PTOUCHINPUT, int) = NULL;
+	static BOOL (__stdcall *CloseTouchInputHandleProc)(HTOUCHINPUT) = NULL;
+	
+	static void InitTouchInput()
+	{
+		HMODULE user32dll = LoadLibrary( _T("user32.dll") );
+		
+		if(user32dll == NULL) return;
+		
+		RegisterTouchWindowProc = ( BOOL (__stdcall *)(HWND, ULONG) )GetProcAddress(user32dll, "RegisterTouchWindow");
+		UnregisterTouchWindowProc = ( BOOL (__stdcall *)(HWND) )GetProcAddress(user32dll, "UnregisterTouchWindow");
+		GetTouchInputInfoProc = ( BOOL (__stdcall *)(HTOUCHINPUT, UINT, PTOUCHINPUT, int) )GetProcAddress(user32dll, "GetTouchInputInfo");
+		CloseTouchInputHandleProc = ( BOOL (__stdcall *)(HTOUCHINPUT) )GetProcAddress(user32dll, "CloseTouchInputHandle");
+		
+		FreeLibrary(user32dll);
+		
+		if( (RegisterTouchWindowProc == NULL) || (MainWindow == NULL) ) return;
+		
+		if( GetSystemMetrics(SM_DIGITIZER) != 0 )
+		{
+			RegisterTouchWindowProc( MainWindow->getHWnd(), 0 );
+			INFO("TouchInput OK.\n");
+		}
+	}
+	
+	static inline void DeinitTouchInput()
+	{
+		if( (UnregisterTouchWindowProc == NULL) || (MainWindow == NULL) ) return;
+		
+		UnregisterTouchWindowProc( MainWindow->getHWnd() );
+	}
+	
+	static inline BOOL GetTouchInputInfo(HTOUCHINPUT hTouchInput, UINT cInputs, PTOUCHINPUT pInputs, int cbSize)
+	{
+		if(GetTouchInputInfoProc == NULL) return FALSE;
+		
+		return GetTouchInputInfoProc(hTouchInput, cInputs, pInputs, cbSize);
+	}
+	
+	static inline BOOL CloseTouchInputHandle(HTOUCHINPUT hTouchInput)
+	{
+		if(CloseTouchInputHandleProc == NULL) return FALSE;
+		
+		return CloseTouchInputHandleProc(hTouchInput);
+	}
+	
+	
+	#define MOUSEEVENTF_FROMTOUCH	0xFF515700
+	
+	static inline bool IsMouseEventFromTouch()
+	{
+		return ( ( GetMessageExtraInfo() & MOUSEEVENTF_FROMTOUCH ) != 0 );
+	}
+	
+	
+	static bool delayedTouchUpTrigger = false;
+	
+	static inline void SetDelayedTouchUp()
+	{
+		delayedTouchUpTrigger = true;
+	}
+	
+	// TouchUpを1フレーム遅延させることでタッチ無反応を防止 (TOUCHEVENTF_DOWNとTOUCHEVENTF_UPがほぼ同時に発生するため)
+	static inline void ExecDelayedTouchUp()
+	{
+		if( !delayedTouchUpTrigger ) return;
+		
+		if( !StylusAutoHoldPressed )
+			NDS_releaseTouch();
+		
+		userTouchesScreen = false;
+		
+		delayedTouchUpTrigger = false;
+	}
+	
+	
+//	bool allowBackgroundHotkeys = false;				// バックグラウンド時のホットキー入力の有効／無効
+//	bool allowBackgroundKeyboardHotkeys = false;		// バックグラウンド時のキーボードからのホットキー入力の有効／無効
+	
+	void HandleHotkeys()
+	{
+		bool S9xGetState(WORD KeyIdent);
+		
+		bool is_background = ( MainWindow->getHWnd() != GetForegroundWindow() );
+		
+		if( is_background && !allowBackgroundInput ) return;
+//		if( is_background && !allowBackgroundHotkeys ) return;
+		
+		WORD key, modifiers, pressed_modifiers;
+		bool key_pressed, last_pressed;
+		
+		const bool alt_pressed = !S9xGetState(VK_LMENU) || !S9xGetState(VK_RMENU);
+		const bool control_pressed = !S9xGetState(VK_LCONTROL) || !S9xGetState(VK_RCONTROL);
+		const bool shift_pressed = !S9xGetState(VK_LSHIFT) || !S9xGetState(VK_RSHIFT);
+		
+		for( SCustomKey* customkey = &CustomKeys.key(0); !IsLastCustomKey(customkey); ++customkey )
+		{
+			key = customkey->key;
+			
+			if(key == 0) continue;
+//			if( (key < 0x8000) && is_background && !allowBackgroundKeyboardHotkeys ) continue;
+			
+			modifiers = customkey->modifiers;
+			last_pressed = customkey->keyPressed;
+			
+			pressed_modifiers = 0;
+			
+			switch(key)
+			{
+				case VK_MENU:
+//					key_pressed = alt_pressed && !control_pressed && !shift_pressed;
+					key_pressed = alt_pressed;		// Alt, Control, Shiftは他のモディファイアキーと組み合わせたホットキー登録ができないためこれでOK
+					break;
+				
+				case VK_CONTROL:
+					key_pressed = control_pressed;
+					break;
+				
+				case VK_SHIFT:
+					key_pressed = shift_pressed;
+					break;
+				
+				default:
+					if(alt_pressed)
+						pressed_modifiers |= CUSTKEY_ALT_MASK;
+					
+					if(control_pressed)
+						pressed_modifiers |= CUSTKEY_CTRL_MASK;
+					
+					if(shift_pressed)
+						pressed_modifiers |= CUSTKEY_SHIFT_MASK;
+					
+					key_pressed = !S9xGetState(key) && (pressed_modifiers == modifiers);
+					break;
+			}
+			
+			if( key_pressed && !last_pressed )
+			{
+				customkey->keyPressed = true;
+				
+				if(customkey->handleKeyDown != NULL)
+				{
+					customkey->handleKeyDown(customkey->param, true);
+					break;		// 重複割り当てされたホットキーを無視する
+				}
+			}
+			else if( !key_pressed && last_pressed )
+			{
+				customkey->keyPressed = false;
+				
+				if(customkey->handleKeyUp != NULL)
+				{
+					customkey->handleKeyUp(customkey->param);
+					break;
+				}
+			}
+		}
+	}
+}
+#endif
+
+#ifdef X432R_MENUITEMMOD_ENABLED
+namespace X432R
+{
+	#ifdef X432R_OPENGL_TEXTUREFILTER_ENABLED
+	bool openGLTextureFilterEnabled = false;
+	#endif
+	
+	static bool soundOutputEnabled = true;
+	bool cpuPowerSavingEnabled = false;
+	
+	#ifdef X432R_MENUITEMMOD_ENABLED2
+	bool showMenubarInFullScreen = false;
+	#endif
+	
+	
+	// ボリュームを0にするだけ
+	static void ChangeSoundEnabled(bool enable)
+	{
+		SPU_SetVolume(enable ? sndvolume : 0);
+		
+		soundOutputEnabled = enable;
+	}
+	
+	void HK_ToggleSoundEnabledKeyDown(int, bool justPressed)
+	{
+		ChangeSoundEnabled( !soundOutputEnabled );
+		
+		WritePrivateProfileBool("X432R", "SoundEnabled", soundOutputEnabled, IniName);
+		
+		if(osd != NULL)
+			osd->addLine(soundOutputEnabled ? "Sound enabled" : "Sound disabled");
+	}
+}
+#endif
+
+#ifdef X432R_CUSTOMRENDERER_ENABLED
+namespace X432R
+{
+	#ifdef X432R_CUSTOMRENDERER_DEBUG
+	bool debugModeEnabled = true;
+	#endif
+	
+	
+	CRITICAL_SECTION customFrontBufferSync;
+//	static GLuint screenTexture[2] = {0};
+	static GLuint screenTexture = 0;
+	static GLuint hudTexture = 0;
+	static u32 lastRenderMagnification = 1;
+	
+	HighResolutionFramebuffers backBuffer;
+	static u32 frontBuffer[3][1024 * 768 * 2] = {0};
+	static u32 masterBrightness[3][2] = {0};
+	static bool isHighResolutionScreen[3][2] = {0};
+	static u32 hudBuffer[256 * 192 * 2] = {0};
+	
+	static volatile bool screenTextureUpdated = false;
+	
+	
+	void ClearBuffers()
+	{
+		Lock lock(customFrontBufferSync);
+		
+		backBuffer.Clear();
+		
+		memset( frontBuffer, 0xFF, sizeof(frontBuffer) );
+		memset( masterBrightness, 0, sizeof(masterBrightness) );
+		memset( isHighResolutionScreen, 0, sizeof(isHighResolutionScreen) );
+		
+		screenTextureUpdated = false;
+	}
+	
+	
+	inline bool IsHighResolutionRendererSelected()
+	{
+		switch(cur3DCore)
+		{
+			case GPU3D_SWRAST_X2:
+			case GPU3D_SWRAST_X3:
+			case GPU3D_SWRAST_X4:
+			case GPU3D_OPENGL_X2:
+			case GPU3D_OPENGL_X3:
+			case GPU3D_OPENGL_X4:
+				return true;
+		}
+		
+		return false;
+	}
+	
+	inline bool IsSoftRasterzierSelected()
+	{
+		switch(cur3DCore)
+		{
+			case GPU3D_SWRAST:
+			case GPU3D_SWRAST_X2:
+			case GPU3D_SWRAST_X3:
+			case GPU3D_SWRAST_X4:
+				return true;
+		}
+		
+		return false;
+	}
+	
+	inline u32 GetCurrentRenderMagnification()
+	{
+		switch(cur3DCore)
+		{
+			case GPU3D_SWRAST_X2:
+			case GPU3D_OPENGL_X2:
+				return 2;
+			
+			case GPU3D_SWRAST_X3:
+			case GPU3D_OPENGL_X3:
+				return 3;
+			
+			case GPU3D_SWRAST_X4:
+			case GPU3D_OPENGL_X4:
+				return 4;
+		}
+		
+		return 1;
+	}
+	
+	
+	static inline void Lock_forHighResolutionFrontBuffer()
+	{
+		EnterCriticalSection(&customFrontBufferSync);
+	}
+	
+	static inline void Unlock_forHighResolutionFrontBuffer()
+	{
+		LeaveCriticalSection(&customFrontBufferSync);
+	}
+	
+/*	static inline bool TryLock_forHighResolutionFrontBuffer()
+	{
+		return TryEnterCriticalSection(&customFrontBufferSync);
+	}
+*/	
+	
+	//---------- debug ----------
+	
+	#ifdef X432R_PROCESSTIME_CHECK
+	#include <windows.h>
+	#include <mmsystem.h>
+	
+	inline void ProcessTimeCounter::Start()
+	{
+		startTime = timeGetTime();
+//		++execCount;
+	}
+	
+	inline void ProcessTimeCounter::Stop()
+	{
+		totalTime += ( timeGetTime() - startTime );
+	}
+	
+	inline void ProcessTimeCounter::Reset()
+	{
+		Time = totalTime;
+//		Count = execCount;
+		
+		totalTime = 0;
+//		execCount = 0;
+	}
+	
+	ProcessTimeCounter timeCounter_3D;
+	ProcessTimeCounter timeCounter_2D;
+	ProcessTimeCounter timeCounter_2DHighReso;
+	ProcessTimeCounter timeCounter_3DFinish;
+	ProcessTimeCounter timeCounter_Final;
+	ProcessTimeCounter timeCounter_Display;
+	ProcessTimeCounter timeCounter_LockMain;
+	ProcessTimeCounter timeCounter_LockDisp;
+	
+	static const bool *debug_IsHighResoScreen = isHighResolutionScreen[0];
+	#endif
+	
+	#ifdef X432R_CUSTOMRENDERER_DEBUG
+	void ShowDebugMessage(std::string message)
+	{
+		if( (osd == NULL) || !debugModeEnabled ) return;
+		
+		osd->setLineColor(0xFF, 0x80, 0);
+		osd->addLine( message.c_str() );
+		osd->setLineColor(0xFF, 0xFF, 0xFF);
+	}
+	#endif
+	
+	
+//	static const std::string windowCaption = (std::string)EMU_DESMUME_NAME_AND_VERSION() + (std::string)" - fps:";
+	static const std::string windowCaption = "DeSmuME X432R - fps:";
+	
+	static inline void UpdateWindowCaptionFPS(const u32 fps, const u32 fps3d)
+	{
+		if( paused || finished || !romloaded || (MainWindow == NULL) ) return;
+		
+		#ifndef X432R_PROCESSTIME_CHECK
+		const std::string caption = windowCaption + std::to_string(fps) + "/" + std::to_string(fps3d);
+		#else
+		timeCounter_3D.Reset();
+		timeCounter_2D.Reset();
+		timeCounter_2DHighReso.Reset();
+		timeCounter_3DFinish.Reset();
+		timeCounter_Final.Reset();
+		timeCounter_Display.Reset();
+		timeCounter_LockMain.Reset();
+		timeCounter_LockDisp.Reset();
+		
+		std::string caption = std::to_string(fps) + "/" + std::to_string(fps3d);
+		caption += " " + std::to_string(timeCounter_3D.Time + timeCounter_2D.Time + timeCounter_Final.Time + timeCounter_LockMain.Time);
+		caption += "(3:" + std::to_string(timeCounter_3D.Time);
+		caption += " 3F:" + std::to_string(timeCounter_3DFinish.Time);
+		caption += " 2:" + std::to_string(timeCounter_2D.Time - timeCounter_3DFinish.Time);
+		caption += " 2H:" + std::to_string(timeCounter_2DHighReso.Time);
+		caption += " F:" + std::to_string(timeCounter_Final.Time);
+		caption += " L:" + std::to_string(timeCounter_LockMain.Time);
+		caption +=  ")/" + std::to_string(timeCounter_Display.Time) + "(";
+		caption += "L:" + std::to_string(timeCounter_LockDisp.Time) + ") ";
+		
+		caption += (std::string)( debug_IsHighResoScreen[0] ? "H" : "L" ) + "/" + (std::string)( debug_IsHighResoScreen[1] ? "H" : "L" );
+		#endif
+		
+		SetWindowText( MainWindow->getHWnd(), caption.c_str() );
+	}
+	
+	
+	//---------- MainThread用 ----------
+	
+	static void UpdateFrontBuffer()
+	{
+		static bool buffers_cleared = false;
+		
+		if( !IsHighResolutionRendererSelected() || !romloaded || finished || display_die )
+		{
+			if( !buffers_cleared )
+			{
+				ClearBuffers();
+				
+				buffers_cleared = true;
+			}
+			
+			return;
+		}
+		
+		buffers_cleared = false;
+		
+		
+		#ifdef X432R_PROCESSTIME_CHECK
+		timeCounter_LockMain.Start();
+		#endif
+		
+		Lock lock(customFrontBufferSync);		// スコープを抜けてこのインスタンスのデストラクタが呼ばれると自動的にロックが解除される
+		
+		#ifdef X432R_PROCESSTIME_CHECK
+		timeCounter_LockMain.Stop();
+		#endif
+		
+		#ifdef X432R_PROCESSTIME_CHECK
+		AutoStopTimeCounter timecounter(timeCounter_Final);
+		#endif
+		
+		const u8 buffer_index = CommonSettings.single_core() ? 0 : clamp(newestDisplayBuffer, 0, 2);
+		
+		u32 * const front_buffer = frontBuffer[buffer_index];
+		u32 * const master_brightness = masterBrightness[buffer_index];
+		bool * const is_highreso_screen = isHighResolutionScreen[buffer_index];
+		
+		#ifdef X432R_PROCESSTIME_CHECK
+		debug_IsHighResoScreen = is_highreso_screen;
+		#endif
+		
+		switch(cur3DCore)
+		{
+			case GPU3D_SWRAST_X2:
+			case GPU3D_OPENGL_X2:
+				backBuffer.UpdateFrontBufferAndDisplayCapture<2>(front_buffer, master_brightness, is_highreso_screen);
+				break;
+			
+			case GPU3D_SWRAST_X3:
+			case GPU3D_OPENGL_X3:
+				backBuffer.UpdateFrontBufferAndDisplayCapture<3>(front_buffer, master_brightness, is_highreso_screen);
+				break;
+			
+			case GPU3D_SWRAST_X4:
+			case GPU3D_OPENGL_X4:
+				backBuffer.UpdateFrontBufferAndDisplayCapture<4>(front_buffer, master_brightness, is_highreso_screen);
+				break;
+		}
+		
+		screenTextureUpdated = false;
+	}
+	
+	static void ChangeRenderMagnification(u32 magnification)
+	{
+		if(magnification < 1)
+			magnification = 1;
+		
+		else if(magnification > 4)
+			magnification = 4;
+		
+		bool softrast = false;
+		
+		switch(cur3DCore)
+		{
+			case GPU3D_SWRAST:
+			case GPU3D_SWRAST_X2:
+			case GPU3D_SWRAST_X3:
+			case GPU3D_SWRAST_X4:
+				softrast = true;
+				break;
+		}
+		
+		switch(magnification)
+		{
+			case 2:
+				cur3DCore = softrast ? GPU3D_SWRAST_X2 : GPU3D_OPENGL_X2;
+				break;
+			
+			case 3:
+				cur3DCore = softrast ? GPU3D_SWRAST_X3 : GPU3D_OPENGL_X3;
+				break;
+			
+			case 4:
+				cur3DCore = softrast ? GPU3D_SWRAST_X4 : GPU3D_OPENGL_X4;
+				break;
+			
+			default:
+				cur3DCore = softrast ? GPU3D_SWRAST : GPU3D_OPENGL_3_2;
+				break;
+		}
+		
+		Change3DCoreWithFallbackAndSave(cur3DCore);
+	}
+	
+	
+	//---------- DisplayThread用 ----------
+	
+	static inline bool IsHudVisible()
+	{
+		if(osd == NULL) return false;
+		
+		return
+		(
+			CommonSettings.hud.ShowInputDisplay ||
+			CommonSettings.hud.ShowGraphicalInputDisplay ||
+			CommonSettings.hud.FpsDisplay ||
+			CommonSettings.hud.FrameCounterDisplay ||
+			CommonSettings.hud.ShowLagFrameCounter ||
+			CommonSettings.hud.ShowMicrophone ||
+			CommonSettings.hud.ShowRTC ||
+			( osd->GetLineCount() > 0 )
+		);
+	}
+	
+	
+	template <u32 RENDER_MAGNIFICATION, u32 ROTATION_ANGLE, bool HIGHRESO, bool HUD_VISIBLE>
+	static void DD_UpdateBackSurface(const u32 *source_buffer, const u32 master_brightness, const u32 screen_index)
+	{
+		const u32 dest_linepitch = ddraw.surfDescBack.lPitch / 4;		// ddraw.surfDescBack.lPitch / ( sizeof(u32) / sizeof(u8) )
+		u32 * const destbuffer_begin = (u32 *)ddraw.surfDescBack.lpSurface;
+		u32 *dest_buffer;
+		
+		source_buffer += (screen_index * 256 * 192 * RENDER_MAGNIFICATION * RENDER_MAGNIFICATION);
+		
+		const u32 * const hud_buffer = hudBuffer + (screen_index * 256 * 192);
+		
+		s32 dest_x, dest_y, dest_begin_x, dest_begin_y, dest_end_x, dest_end_y;
+		s32 source_x, source_y, source_begin_x, source_begin_y;
+		s32 downscaled_index;
+		
+		RGBA8888 color_rgba8888, hud_rgba8888;
+		
+		switch(ROTATION_ANGLE)
+		{
+			case 90:
+//				dest_begin_x = screen_index ? (192 * RENDER_MAGNIFICATION) : 0;
+				dest_begin_x = screen_index ? 0 : (192 * RENDER_MAGNIFICATION);
+				dest_begin_y = 0;
+				dest_end_x = dest_begin_x + (192 * RENDER_MAGNIFICATION);
+				dest_end_y = dest_begin_y + (256 * RENDER_MAGNIFICATION);
+				
+				source_begin_x = 0;
+				source_begin_y = (192 * RENDER_MAGNIFICATION) - 1;
+				break;
+				
+			case 180:
+				dest_begin_x = 0;
+//				dest_begin_y = screen_index ? (192 * RENDER_MAGNIFICATION) : 0;
+				dest_begin_y = screen_index ? 0 : (192 * RENDER_MAGNIFICATION);
+				dest_end_x = 256 * RENDER_MAGNIFICATION;
+				dest_end_y = dest_begin_y + (192 * RENDER_MAGNIFICATION);
+				
+				source_begin_x = (256 * RENDER_MAGNIFICATION) - 1;
+				source_begin_y = (192 * RENDER_MAGNIFICATION) - 1;
+				break;
+				
+			case 270:
+				dest_begin_x = screen_index ? (192 * RENDER_MAGNIFICATION) : 0;
+				dest_begin_y = 0;
+				dest_end_x = dest_begin_x + (192 * RENDER_MAGNIFICATION);
+				dest_end_y = dest_begin_y + (256 * RENDER_MAGNIFICATION);
+				
+				source_begin_x = (256 * RENDER_MAGNIFICATION) - 1;
+				source_begin_y = 0;
+				break;
+				
+			default:
+				dest_begin_x = 0;
+				dest_begin_y = screen_index ? (192 * RENDER_MAGNIFICATION) : 0;
+				dest_end_x = 256 * RENDER_MAGNIFICATION;
+				dest_end_y = dest_begin_y + (192 * RENDER_MAGNIFICATION);
+				
+				source_begin_x = 0;
+				source_begin_y = 0;
+				break;
+		}
+		
+		source_x = source_begin_x;
+		source_y = source_begin_y;
+		
+		for(dest_y = dest_begin_y; dest_y < dest_end_y; ++dest_y)
+		{
+			dest_buffer = destbuffer_begin + (dest_y * dest_linepitch) + dest_begin_x;
+			
+			for(dest_x = dest_begin_x; dest_x < dest_end_x; ++dest_x, ++dest_buffer)
+			{
+				if( !HIGHRESO || HUD_VISIBLE )
+					downscaled_index = ( (source_y / RENDER_MAGNIFICATION) * 256 ) + (source_x / RENDER_MAGNIFICATION);
+				
+				if(HIGHRESO)
+					color_rgba8888 = RGBA8888::AlphaBlend( master_brightness, source_buffer[ (source_y * 256 * RENDER_MAGNIFICATION) + source_x ] );
+				else
+					color_rgba8888 = source_buffer[downscaled_index];
+				
+				if(HUD_VISIBLE)
+					color_rgba8888.AlphaBlend( hud_buffer[downscaled_index] );
+				
+				*dest_buffer = color_rgba8888.Color;
+				
+				switch(ROTATION_ANGLE)
+				{
+					case 90:	--source_y;		break;
+					case 180:	--source_x;		break;
+					case 270:	++source_y;		break;
+					default:	++source_x;		break;
+				}
+			}
+			
+			switch(ROTATION_ANGLE)
+			{
+				case 90:	++source_x;		source_y = source_begin_y;		break;
+				case 180:	--source_y;		source_x = source_begin_x;		break;
+				case 270:	--source_x;		source_y = source_begin_y;		break;
+				default:	++source_y;		source_x = source_begin_x;		break;
+			}
+		}
+	}
+	
+	static void DD_FillRect(LPDIRECTDRAWSURFACE7 surface, const u32 left, const u32 top, const u32 right, const u32 bottom)
+	{
+		RECT rect;
+		SetRect(&rect, left, top, right, bottom);
+		
+		DDBLTFX effect;
+		memset( &effect, 0, sizeof(DDBLTFX) );
+		effect.dwSize = sizeof(DDBLTFX);
+		
+		effect.dwFillColor = ScreenGapColor;		// 32bpp環境のみ考慮
+		
+		surface->Blt(&rect, NULL, NULL, DDBLT_COLORFILL | DDBLT_WAIT, &effect);
+	}
+	
+	template <u32 RENDER_MAGNIFICATION>
+	static void DD_DoDisplay()
+	{
+		#ifdef X432R_PROCESSTIME_CHECK
+		AutoStopTimeCounter timecounter(timeCounter_Display);
+		#endif
+		
+		
+		const HWND window_handle = MainWindow->getHWnd();
+		const bool hud_visible = IsHudVisible();
+		
+		const u32 rotation_angle = (video.layout == 0) ? video.rotation : 0;
+		const bool source_rect_rotation = (rotation_angle == 90) || (rotation_angle == 270);
+		bool screen_swap = false;
+		
+		switch(video.swap)
+		{
+			case 1:		screen_swap = true;							break;
+			case 2:		screen_swap = (MainScreen.offset > 0);		break;
+			case 3:		screen_swap = (SubScreen.offset > 0);		break;
+		}
+		
+		if( !screenTextureUpdated || hud_visible )
+		{
+			if(hud_visible)
+			{
+				osd->swapScreens = screen_swap;
+				aggDraw.hud->attach( (u8*)hudBuffer, 256, 192 * 2, 256 * 4 );
+				aggDraw.hud->clear();
+				DoDisplay_DrawHud();
+			}
+			
+			if( !ddraw.lock() ) return;
+			
+			const u32 color_depth = ddraw.surfDescBack.ddpfPixelFormat.dwRGBBitCount;
+			
+			if(color_depth != 32)
+			{
+				ddraw.unlock();
+				
+				if(color_depth != 0)
+				{
+					INFO("X432R: DirectDraw Output failed.\n");
+					INFO("Unsupported color depth: %i bpp\n", color_depth);
+				
+					SetStyle( ( GetStyle() & ~DWS_DISPMETHODS ) | DWS_OPENGL );
+					WritePrivateProfileInt("Video","Display Method", DISPMETHOD_OPENGL, IniName);
+					ddraw.createSurfaces(window_handle);
+				}
+				
+				return;
+			}
+			
+			static u8 buffer_index = 0;
+			
+			if( !screenTextureUpdated )
+			{
+				#ifdef X432R_PROCESSTIME_CHECK
+				timeCounter_LockDisp.Start();
+				#endif
+				
+				Lock lock(customFrontBufferSync);
+				
+				#ifdef X432R_PROCESSTIME_CHECK
+				timeCounter_LockDisp.Stop();
+				#endif
+				
+				screenTextureUpdated = true;
+				
+				buffer_index = CommonSettings.single_core() ? 0 : clamp(currDisplayBuffer, 0, 2);
+			}
+			
+			const u32 * const front_buffer = frontBuffer[buffer_index];
+			const u32 * const master_brightness = masterBrightness[buffer_index];
+			const bool * const is_highreso_screen = isHighResolutionScreen[buffer_index];
+			
+			#ifdef X432R_PROCESSTIME_CHECK
+			debug_IsHighResoScreen = is_highreso_screen;
+			#endif
+			
+			#define X432R_CALL_UPDATEBACKSURFACE(rotation_angle,screen_index) \
+			{ \
+				if( is_highreso_screen[screen_index] ) \
+				{ \
+					if(hud_visible) \
+						DD_UpdateBackSurface<RENDER_MAGNIFICATION, rotation_angle, true, true>(front_buffer, master_brightness[screen_index], screen_index); \
+					else \
+						DD_UpdateBackSurface<RENDER_MAGNIFICATION, rotation_angle, true, false>(front_buffer, master_brightness[screen_index], screen_index); \
+				} \
+				else \
+				{ \
+					if(hud_visible) \
+						DD_UpdateBackSurface<RENDER_MAGNIFICATION, rotation_angle, false, true>(front_buffer, 0, screen_index); \
+					else \
+						DD_UpdateBackSurface<RENDER_MAGNIFICATION, rotation_angle, false, false>(front_buffer, 0, screen_index); \
+				} \
+			}
+			
+			for(u32 i = 0; i < 2; ++i)
+			{
+				switch(rotation_angle)
+				{
+					case 90:	X432R_CALL_UPDATEBACKSURFACE(90, i);	break;
+					case 180:	X432R_CALL_UPDATEBACKSURFACE(180, i);	break;
+					case 270:	X432R_CALL_UPDATEBACKSURFACE(270, i);	break;
+					default:	X432R_CALL_UPDATEBACKSURFACE(0, i);		break;
+				}
+			}
+			
+			#undef X432R_CALL_UPDATEBACKSURFACE
+			
+			if( !ddraw.unlock() ) return;
+		}
+		
+		RECT screen_source_rect[2] =
+		{
+			{
+				0,
+				0,
+				source_rect_rotation ?	(192 * RENDER_MAGNIFICATION)			: (256 * RENDER_MAGNIFICATION),
+				source_rect_rotation ?	(256 * RENDER_MAGNIFICATION)			: (192 * RENDER_MAGNIFICATION)
+			},
+			{
+				source_rect_rotation ?	(192 * RENDER_MAGNIFICATION)			: 0,
+				source_rect_rotation ?	0										: (192 * RENDER_MAGNIFICATION),
+				source_rect_rotation ?	(192 * RENDER_MAGNIFICATION * 2)		: (256 * RENDER_MAGNIFICATION),
+				source_rect_rotation ?	(256 * RENDER_MAGNIFICATION)			: (192 * RENDER_MAGNIFICATION * 2)
+			}
+		};
+		
+		RECT *source_rect[2] =
+		{
+			&screen_source_rect[0],
+			&screen_source_rect[1]
+		};
+		
+		RECT *dest_rect[2] =
+		{
+			screen_swap ? &SubScreenRect : &MainScreenRect,
+			screen_swap ? &MainScreenRect : &SubScreenRect
+		};
+		
+		
+		RECT window_rect;
+		
+		#if 1
+		GetWindowRect(window_handle, &window_rect);
+		#else
+		u32 toolbar_height = MainWindowToolbar->GetHeight();
+		
+		GetClientRect(window_handle, &window_rect);
+		window_rect.top += toolbar_height;
+		window_rect.bottom += toolbar_height;
+		#endif
+		
+		const u32 window_width = window_rect.right - window_rect.left;
+		const u32 window_height = window_rect.bottom - window_rect.top;
+		
+		RECT screen_rect;
+		GetNdsScreenRect(&screen_rect);
+		
+		if( IsZoomed(window_handle) )
+		{
+			DD_FillRect(ddraw.surface.primary,	0,					0,						screen_rect.left,		window_height);			// left
+			DD_FillRect(ddraw.surface.primary,	screen_rect.right,	0,						window_width,			window_height);			// right
+			DD_FillRect(ddraw.surface.primary,	screen_rect.left,	0,						screen_rect.right,		screen_rect.top);		// top
+			DD_FillRect(ddraw.surface.primary,	screen_rect.left,	screen_rect.bottom,		screen_rect.right,		window_height);			// bottom
+		}
+		
+		if( (video.layout == 0) && (video.screengap > 0) )
+		{
+			#if 1
+			if(source_rect_rotation)
+				DD_FillRect(ddraw.surface.primary, MainScreenRect.right, MainScreenRect.top, SubScreenRect.left, MainScreenRect.bottom);
+			else
+				DD_FillRect(ddraw.surface.primary, MainScreenRect.left, MainScreenRect.bottom, MainScreenRect.right, SubScreenRect.top);
+			#else
+			RECT gap_rect = GapRect;
+			gap_rect.top += toolbar_height;
+			gap_rect.bottom += toolbar_height;
+			
+			DD_FillRect(ddraw.surface.primary, gap_rect.left, gap_rect.top, gap_rect.right, gap_rect.bottom);
+			#endif
+		}
+		
+		if(video.layout == 2)
+		{
+			const u32 screen_index = screen_swap ? 1 : 0;
+			
+			ddraw.blt( dest_rect[screen_index], source_rect[screen_index] );
+		}
+		else
+		{
+			for(int i = 0; i < 2; ++i)
+			{
+				if( !ddraw.blt( dest_rect[i], source_rect[i] ) ) break;
+			}
+		}
+	}
+	
+	
+	template <u32 RENDER_MAGNIFICATION>
+	static void DoDisplay()
+	{
+		X432R_STATIC_RENDER_MAGNIFICATION_CHECK();
+		assert( (lastRenderMagnification >= 1) && (lastRenderMagnification <= 4) );
+		
+		
+		static const u32 RENDER_WIDTH = 256 * RENDER_MAGNIFICATION;
+		static const u32 RENDER_HEIGHT = 192 * RENDER_MAGNIFICATION;
+		static const u32 TEXTURE_WIDTH = RENDER_WIDTH;
+		static const u32 TEXTURE_HEIGHT = RENDER_HEIGHT * 2;
+		
+		
+		if( finished || display_die || (gpu3D == NULL) ) return;
+		
+		
+		if(screenTextureUpdated)
+		{
+			if( displayPostponeType && !displayNoPostponeNext && ( displayPostponeType < 0 || ( timeGetTime() < displayPostponeUntil ) ) ) return;
+			
+			displayNoPostponeNext = false;
+		}
+		
+		
+		if( AnyLuaActive() )
+		{
+			if( g_thread_self() == display_thread )
+				InvokeOnMainThread( ( void(*)(DWORD) )CallRegisteredLuaFunctions, LUACALL_AFTEREMULATIONGUI );
+			
+			else
+				CallRegisteredLuaFunctions(LUACALL_AFTEREMULATIONGUI);
+		}
+		
+		
+		const HWND window_handle = MainWindow->getHWnd();
+		const u32 window_style = GetStyle();
+		
+		if( (window_style & DWS_DDRAW_HW) || (window_style & DWS_DDRAW_SW) )
+		{
+			DeleteScreenTexture();
+			gldisplay.kill();
+			
+			DD_DoDisplay<RENDER_MAGNIFICATION>();
+			return;
+		}
+		
+		
+		//------ OGL_DoDisplay() ------
+		
+		if( !gldisplay.begin() ) return;
+		
+		#ifdef X432R_PROCESSTIME_CHECK
+		AutoStopTimeCounter timecounter(timeCounter_Display);
+		#endif
+		
+		
+		// 作成可能な最大テクスチャサイズをチェック
+		static int max_texture_size = 0;
+		
+		if(max_texture_size == 0)
+		{
+			glGetIntegerv(GL_MAX_TEXTURE_SIZE, &max_texture_size);
+			INFO( "X432R: OpenGL supported texture size:%d (required:%d)\n", max_texture_size, (TEXTURE_WIDTH * 4) );
+			
+			if( max_texture_size < (TEXTURE_WIDTH * 4) )
+			{
+				gldisplay.end();
+				
+				INFO("X432R: High-Resolution Output failed.\n");
+				Change3DCoreWithFallbackAndSave(GPU3D_OPENGL_3_2);
+				return;
+			}
+			
+			INFO("X432R: High-Resolution Output OK.\n");
+		}
+		
+		
+		RECT client_rect;
+		GetClientRect(window_handle, &client_rect);
+		
+		const int window_width = client_rect.right - client_rect.left;
+		const int window_height = client_rect.bottom - client_rect.top;
+		
+		
+		// 画面描画用テクスチャ生成
+		glPixelStorei(GL_UNPACK_ALIGNMENT, 4);
+		
+		if(hudTexture == 0)
+		{
+			glGenTextures(1, &hudTexture);
+			
+			glBindTexture(GL_TEXTURE_2D, hudTexture);
+			glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, 256, 192 * 2, 0, GL_BGRA, GL_UNSIGNED_BYTE, NULL);
+		}
+		
+		if(screenTexture == 0)
+			glGenTextures(1, &screenTexture);
+		
+		glBindTexture(GL_TEXTURE_2D, screenTexture);
+		
+		if(lastRenderMagnification != RENDER_MAGNIFICATION)
+		{
+			lastRenderMagnification = RENDER_MAGNIFICATION;
+			
+			glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, TEXTURE_WIDTH, TEXTURE_HEIGHT, 0, GL_BGRA, GL_UNSIGNED_BYTE, NULL);		// データを転送せずに領域だけ確保
+		}
+		
+		static bool is_highreso_upper = false;
+		static bool is_highreso_lower = false;
+		static u32 upper_brightness = 0;
+		static u32 lower_brightness = 0;
+		
+		if( !screenTextureUpdated )
+		{
+			#ifdef X432R_PROCESSTIME_CHECK
+			timeCounter_LockDisp.Start();
+			#endif
+			
+			Lock_forHighResolutionFrontBuffer();
+			
+			#ifdef X432R_PROCESSTIME_CHECK
+			timeCounter_LockDisp.Stop();
+			#endif
+			
+			screenTextureUpdated = true;
+			
+			const u8 buffer_index = CommonSettings.single_core() ? 0 : clamp(currDisplayBuffer, 0, 2);
+			const u32 * const front_buffer = frontBuffer[buffer_index];
+			
+			is_highreso_upper = isHighResolutionScreen[buffer_index][0];
+			is_highreso_lower = isHighResolutionScreen[buffer_index][1];
+			
+			upper_brightness = is_highreso_upper ? masterBrightness[buffer_index][0] : 0;
+			lower_brightness = is_highreso_lower ? masterBrightness[buffer_index][1] : 0;
+			
+			Unlock_forHighResolutionFrontBuffer();
+			
+			if(is_highreso_upper && is_highreso_lower)
+				glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, TEXTURE_WIDTH, TEXTURE_HEIGHT, GL_BGRA, GL_UNSIGNED_BYTE, front_buffer);
+			else
+			{
+				if(is_highreso_upper)
+					glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, RENDER_WIDTH, RENDER_HEIGHT, GL_BGRA, GL_UNSIGNED_BYTE, front_buffer);
+				else
+					glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, 256, 192, GL_BGRA, GL_UNSIGNED_BYTE, front_buffer);
+				
+				if(is_highreso_lower)
+					glTexSubImage2D( GL_TEXTURE_2D, 0, 0, RENDER_HEIGHT, RENDER_WIDTH, RENDER_HEIGHT, GL_BGRA, GL_UNSIGNED_BYTE, front_buffer + (RENDER_WIDTH * RENDER_HEIGHT) );
+				else
+					glTexSubImage2D( GL_TEXTURE_2D, 0, 0, RENDER_HEIGHT, 256, 192, GL_BGRA, GL_UNSIGNED_BYTE, front_buffer + (RENDER_WIDTH * RENDER_HEIGHT) );
+			}
+		}
+		
+		
+		// テクスチャ座標生成
+		static const float default_texvert[2][8] =
+		{
+			{
+				0.0f,		0.0f,
+				1.0f,		0.0f,
+				1.0f,		0.5f,
+				0.0f,		0.5f
+			},
+			{
+				0.0f,		0.5f,
+				1.0f,		0.5f,
+				1.0f,		1.0f,
+				0.0f,		1.0f
+			}
+		};
+		
+		static const float lowreso_texvert[2][8] =
+		{
+			{
+				0.0f,								0.0f,
+				256.0f / (float)TEXTURE_WIDTH,		0.0f,
+				256.0f / (float)TEXTURE_WIDTH,		192.0f / (float)TEXTURE_HEIGHT,
+				0.0f,								192.0f / (float)TEXTURE_HEIGHT
+			},
+			{
+				0.0f,								0.5f,
+				256.0f / (float)TEXTURE_WIDTH,		0.5f,
+				256.0f / (float)TEXTURE_WIDTH,		0.5f + ( 192.0f / (float)TEXTURE_HEIGHT ),
+				0.0f,								0.5f + ( 192.0f / (float)TEXTURE_HEIGHT )
+			}
+		};
+		
+		float texvert[2][8];
+		float texvert_hud[2][8];
+		
+		bool screen_swap = false;
+		bool hud_swap = false;
+		u32 texture_index_offset = 0;
+		u32 i;
+		
+		switch(video.swap)
+		{
+			case 1:		screen_swap = true;							break;
+			case 2:		screen_swap = (MainScreen.offset > 0);		break;
+			case 3:		screen_swap = (SubScreen.offset > 0);		break;
+		}
+		
+		hud_swap = screen_swap;
+		
+		switch(video.rotation)
+		{
+			case 90:
+				texture_index_offset = 6;
+				screen_swap = !screen_swap;
+				break;
+				
+			case 180:
+				texture_index_offset = 4;
+				screen_swap = !screen_swap;
+				break;
+				
+			case 270:
+				texture_index_offset = 2;
+				break;
+		}
+		
+		for(i = 0; i < 8; ++i)
+		{
+			u32 index = (i + texture_index_offset) % 8;
+			
+			texvert[0][i] = is_highreso_upper ? default_texvert[0][index] : lowreso_texvert[0][index];
+			texvert[1][i] = is_highreso_lower ? default_texvert[1][index] : lowreso_texvert[1][index];
+			
+			texvert_hud[0][i] = default_texvert[0][index];
+			texvert_hud[1][i] = default_texvert[1][index];
+		}
+		
+		
+		// ポリゴン座標配列生成
+		const u32 upperscreen_index = screen_swap ? 1 : 0;
+		const u32 lowerscreen_index = screen_swap ? 0 : 1;
+		const RECT screen_rect[] = {MainScreenRect, SubScreenRect};
+		
+		for(i = 0; i < 2; ++i)
+		{
+			ScreenToClient(window_handle, (LPPOINT)&screen_rect[i].left);
+			ScreenToClient(window_handle, (LPPOINT)&screen_rect[i].right);
+		}
+		
+		const float polygon_vertices[2][8] =
+		{
+			{
+				screen_rect[upperscreen_index].left,		screen_rect[upperscreen_index].top,
+				screen_rect[upperscreen_index].right,		screen_rect[upperscreen_index].top,
+				screen_rect[upperscreen_index].right,		screen_rect[upperscreen_index].bottom,
+				screen_rect[upperscreen_index].left,		screen_rect[upperscreen_index].bottom
+			},
+			{
+				screen_rect[lowerscreen_index].left,		screen_rect[lowerscreen_index].top,
+				screen_rect[lowerscreen_index].right,		screen_rect[lowerscreen_index].top,
+				screen_rect[lowerscreen_index].right,		screen_rect[lowerscreen_index].bottom,
+				screen_rect[lowerscreen_index].left,		screen_rect[lowerscreen_index].bottom
+			}
+		};
+		
+		
+		// 描画開始
+		const RGBA8888 clearcolor = (u32)ScreenGapColor;
+		const GLuint texture_filter = ( GetStyle() & DWS_FILTER ) ? GL_LINEAR : GL_NEAREST;
+		
+		glDisable(GL_LIGHTING);
+		glDisable(GL_DEPTH_TEST);
+		glDisable(GL_STENCIL_TEST);
+		glDisable(GL_CULL_FACE);
+		glDisable(GL_ALPHA);
+		
+		glEnable(GL_TEXTURE_2D);
+		glEnable(GL_BLEND);
+		glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+		glEnableClientState(GL_VERTEX_ARRAY);
+		glEnableClientState(GL_TEXTURE_COORD_ARRAY);
+		
+		glViewport(0, 0, window_width, window_height);
+		
+		glMatrixMode(GL_PROJECTION);
+		glLoadIdentity();
+		glOrtho( 0.0f, (float)window_width, (float)window_height, 0.0f, -100.0f, 100.0f );
+		
+		glMatrixMode(GL_MODELVIEW);
+		glLoadIdentity();
+		
+		glClearColor( (float)clearcolor.R / 255.0f, (float)clearcolor.G / 255.0f, (float)clearcolor.B / 255.0f, 1.0f );
+		glClear(GL_COLOR_BUFFER_BIT);				// Viewport全体をScreen Gapの色でクリア
+		
+		glTexEnvi(GL_TEXTURE_ENV, GL_TEXTURE_ENV_MODE, GL_REPLACE);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, texture_filter);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, texture_filter);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+		
+//		glColor4ub(0xFF, 0xFF, 0xFF, 0xFF);
+		glVertexPointer(2, GL_FLOAT, 0, polygon_vertices);
+		
+		
+		glTexCoordPointer(2, GL_FLOAT, 0, texvert);
+		
+		if(video.layout == 2)
+			glDrawArrays(GL_QUADS, screen_swap ? 4 : 0, 4);
+		else
+			glDrawArrays(GL_QUADS, 0, 4 * 2);
+		
+		if( (upper_brightness != 0) || (lower_brightness != 0) )
+		{
+//			glDisable(GL_TEXTURE_2D);
+			glBindTexture(GL_TEXTURE_2D, 0);
+			glEnableClientState(GL_COLOR_ARRAY);
+			
+			#if 0
+			u8 fade_colors[2][4][4];
+			RGBA8888 brightness;
+			u32 j;
+			
+			for(i = 0; i < 2; ++i)
+			{
+				brightness = (i == 0) ? upper_brightness : lower_brightness;
+				
+				for(j = 0; j < 4; ++j)
+				{
+					fade_colors[i][j][0] = brightness.R;
+					fade_colors[i][j][1] = brightness.G;
+					fade_colors[i][j][2] = brightness.B;
+					fade_colors[i][j][3] = brightness.A;
+				}
+			}
+			#else
+			const u32 fade_colors[8] =
+			{
+				upper_brightness, upper_brightness, upper_brightness, upper_brightness,
+				lower_brightness, lower_brightness, lower_brightness, lower_brightness
+			};
+			#endif
+			
+			glColorPointer(4, GL_UNSIGNED_BYTE, 0, fade_colors);
+			glDrawArrays(GL_QUADS, 0, 4 * 2);
+			
+			glDisableClientState(GL_COLOR_ARRAY);
+//			glEnable(GL_TEXTURE_2D);
+		}
+		
+		if( IsHudVisible() )
+		{
+			osd->swapScreens = hud_swap;
+			aggDraw.hud->attach( (u8*)hudBuffer, 256, 192 * 2, 256 * 4 );
+			aggDraw.hud->clear();
+			DoDisplay_DrawHud();
+			
+			glBindTexture(GL_TEXTURE_2D, hudTexture);
+			glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, 256, 192 * 2, GL_BGRA, GL_UNSIGNED_BYTE, hudBuffer);
+			
+			glTexEnvi(GL_TEXTURE_ENV, GL_TEXTURE_ENV_MODE, GL_REPLACE);
+//			glTexEnvi(GL_TEXTURE_ENV, GL_TEXTURE_ENV_MODE, GL_MODULATE);
+//			glColor4ub(0xFF, 0xFF, 0xFF, 0x7F);
+			glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+			glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+			glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+			glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+			
+			glTexCoordPointer(2, GL_FLOAT, 0, texvert_hud);
+			glDrawArrays(GL_QUADS, 0, 4 * 2);
+		}
+		
+		glBindTexture(GL_TEXTURE_2D, 0);
+		glDisable(GL_TEXTURE_2D);
+		glDisable(GL_BLEND);
+		glDisableClientState(GL_VERTEX_ARRAY);
+		glDisableClientState(GL_TEXTURE_COORD_ARRAY);
+		
+		gldisplay.showPage();
+		gldisplay.end();
+	}
+	
+//	inline GLuint GetScreenTexture()
+	inline u32 GetScreenTexture()
+	{
+		if(screenTexture == 0)
+			glGenTextures(1, &screenTexture);
+		
+		return screenTexture;
+	}
+	
+	static inline void DeleteScreenTexture()
+	{
+		lastRenderMagnification = 1;
+		
+		if(screenTexture != 0)
+		{
+			glDeleteTextures(1, &screenTexture);
+			screenTexture = 0;
+		}
+		
+		if(hudTexture != 0)
+		{
+			glDeleteTextures(1, &hudTexture);
+			hudTexture = 0;
+		}
+	}
+}
+#endif
+
+
 //does a single display work unit. only to be used from the display thread
 static void DoDisplay(bool firstTime)
 {
 	Lock lock (win_backbuffer_sync);
+
+	#ifdef X432R_CUSTOMRENDERER_ENABLED
+	switch(cur3DCore)
+	{
+		case GPU3D_SWRAST_X2:
+		case GPU3D_OPENGL_X2:
+			X432R::DoDisplay<2>();
+			return;
+		
+		case GPU3D_SWRAST_X3:
+		case GPU3D_OPENGL_X3:
+			X432R::DoDisplay<3>();
+			return;
+		
+		case GPU3D_SWRAST_X4:
+		case GPU3D_OPENGL_X4:
+			X432R::DoDisplay<4>();
+			return;
+		
+		default:
+			if(X432R::lastRenderMagnification != 1)
+				X432R::lastRenderMagnification = 1;
+			break;
+	}
+	#endif
 
 	if(displayPostponeType && !displayNoPostponeNext && (displayPostponeType < 0 || timeGetTime() < displayPostponeUntil))
 		return;
@@ -1967,7 +3307,26 @@ void displayProc()
 void displayThread(void*)
 {
 	for(;;) {
+		#ifndef X432R_CUSTOMRENDERER_ENABLED
 		if(display_die) return;
+		#else
+		if(display_die)
+		{
+			X432R::DeleteScreenTexture();
+			gldisplay.kill();
+			return;
+		}
+		#endif
+		
+		#ifdef X432R_MENUITEMMOD_ENABLED
+		if( X432R::cpuPowerSavingEnabled && ( emu_paused || !execute || !romloaded ) )
+		{
+			Sleep(200);		// WaitForSingleObject()はCPU使用率を下げる役には立たないのでSleep()を実行してしまう
+			
+			if( (MainWindow == NULL) || ( MainWindow->getHWnd() != GetForegroundWindow() ) ) continue;		// ウインドウがバックグラウンドなら画面出力を実行しない
+		}
+		#endif
+		
 		displayProc();
 		//Sleep(10); //don't be greedy and use a whole cpu core, but leave room for 60fps 
 		WaitForSingleObject(display_wakeup_event, 10); // same as sleep but lets something wake us up early
@@ -1979,10 +3338,19 @@ void KillDisplay()
 	display_die = true;
 	SetEvent(display_wakeup_event);
 	g_thread_join(display_thread);
+	
+	#ifdef X432R_CUSTOMRENDERER_ENABLED
+	if( CommonSettings.single_core() )
+	{
+		X432R::DeleteScreenTexture();
+		gldisplay.kill();
+	}
+	#endif
 }
 
 void Display()
 {
+	#ifndef X432R_CUSTOMRENDERER_ENABLED
 	if(CommonSettings.single_core())
 	{
 		video.srcBuffer = (u8*)GPU_screen;
@@ -2009,6 +3377,51 @@ void Display()
 
 		g_mutex_unlock(display_mutex);
 	}
+	#else
+	if( CommonSettings.single_core() )
+	{
+		if( X432R::IsHighResolutionRendererSelected() && X432R::backBuffer.IsCurrentFrameRendered() )
+			X432R::UpdateFrontBuffer();
+		
+		video.srcBuffer = (u8*)GPU_screen;
+		DoDisplay(true);
+	}
+	else
+	{
+		if(display_thread == NULL)
+		{
+			display_mutex = g_mutex_new();
+			display_thread = g_thread_create( (GThreadFunc)displayThread,
+											 NULL,
+											 TRUE,
+											 NULL);
+		}
+		
+		g_mutex_lock(display_mutex);
+		
+		int newest_index = newestDisplayBuffer;
+		
+		if( int diff = ( (currDisplayBuffer + 1) % 3 ) - newestDisplayBuffer )
+			newest_index += diff;
+		else
+			newest_index = (currDisplayBuffer + 2) % 3;
+		
+		if( !X432R::IsHighResolutionRendererSelected() )
+		{
+			newestDisplayBuffer = newest_index;
+			
+			memcpy( displayBuffers[newestDisplayBuffer], GPU_screen, 256 * 192 * 4 );
+		}
+		else if( X432R::backBuffer.IsCurrentFrameRendered() )
+		{
+			newestDisplayBuffer = newest_index;
+			
+			X432R::UpdateFrontBuffer();
+		}
+		
+		g_mutex_unlock(display_mutex);
+	}
+	#endif
 }
 
 
@@ -2087,7 +3500,10 @@ static struct MainLoopData
 
 static void StepRunLoop_Core()
 {
+	#ifndef X432R_TOUCHINPUT_ENABLED
 	input_acquire();
+	#endif
+	
 	NDS_beginProcessingInput();
 	{
 		input_process();
@@ -2172,6 +3588,10 @@ static void StepRunLoop_User()
 		mainLoopData.fps = mainLoopData.fpsframecount;
 		mainLoopData.fpsframecount = 0;
 		QueryPerformanceCounter((LARGE_INTEGER *)&mainLoopData.fpsticks);
+		
+		#ifdef X432R_CUSTOMRENDERER_ENABLED
+		X432R::UpdateWindowCaptionFPS(mainLoopData.fps, mainLoopData.fps3d);
+		#endif
 	}
 
 	if(nds.idleFrameCounter==0 || oneSecond) 
@@ -2309,6 +3729,7 @@ DWORD WINAPI run()
 
 	while(!finished)
 	{
+		#ifndef X432R_TOUCHINPUT_ENABLED
 		while(execute)
 		{
 			StepRunLoop_Core();
@@ -2318,6 +3739,22 @@ DWORD WINAPI run()
 		}
 		StepRunLoop_Paused();
 		CheckMessages();
+		#else
+		if(execute)
+		{
+			StepRunLoop_Core();
+			StepRunLoop_User();
+			StepRunLoop_Throttle();
+	}
+		
+		else
+			StepRunLoop_Paused();
+		
+		input_acquire();
+		X432R::HandleHotkeys();
+		X432R::ExecDelayedTouchUp();
+		CheckMessages();
+		#endif
 	}
 
 	return 1;
@@ -2546,8 +3983,10 @@ int MenuInit()
 	DeleteMenu(configMenu,GetSubMenuIndexByHMENU(configMenu,advancedMenu),MF_BYPOSITION);
 #endif
 
+	#ifndef X432R_MENUITEMMOD_ENABLED
 	if (!gShowConsole)
 		DeleteMenu(toolsMenu, IDM_CONSOLE_ALWAYS_ON_TOP, MF_BYCOMMAND);
+	#endif
 
 	return 1;
 }
@@ -2913,6 +4352,11 @@ int _main()
 	InitializeCriticalSection(&win_execute_sync);
 	InitializeCriticalSection(&win_backbuffer_sync);
 	InitializeCriticalSection(&display_invoke_handler_cs);
+	
+	#ifdef X432R_CUSTOMRENDERER_ENABLED
+	InitializeCriticalSection(&X432R::customFrontBufferSync);
+	#endif
+	
 	display_invoke_ready_event = CreateEvent(NULL, TRUE, FALSE, NULL);
 	display_invoke_done_event = CreateEvent(NULL, FALSE, FALSE, NULL);
 	display_wakeup_event = CreateEvent(NULL, FALSE, FALSE, NULL);
@@ -2935,7 +4379,12 @@ int _main()
 	//this helps give a substantial speedup for singlecore users
 	SYSTEM_INFO systemInfo;
 	GetSystemInfo(&systemInfo);
+	
+	#ifndef X432R_SINGLECORE_TEST
 	CommonSettings.num_cores = systemInfo.dwNumberOfProcessors;
+	#else
+	CommonSettings.num_cores = 1;
+	#endif
 
 	msgbox = &msgBoxWnd;
 
@@ -2958,6 +4407,10 @@ int _main()
 	u32 style = DWS_NORMAL;
 	if(GetPrivateProfileBool("Video","Window Always On Top", false, IniName)) style |= DWS_ALWAYSONTOP;
 	if(GetPrivateProfileBool("Video","Window Lockdown", false, IniName)) style |= DWS_LOCKDOWN;
+	
+	#ifdef X432R_MENUITEMMOD_ENABLED
+	else if( GetPrivateProfileBool("X432R", "NoResize", true, IniName) ) style |= DWS_NORESIZE;
+	#endif
 	
 	if(GetPrivateProfileBool("Video","Display Method Filter", false, IniName))
 		style |= DWS_FILTER;
@@ -3004,7 +4457,13 @@ int _main()
 	RefreshMicSettings();
 	
 	video.screengap = GetPrivateProfileInt("Display", "ScreenGap", 0, IniName);
+	
+	#ifndef X432R_MENUITEMMOD_ENABLED
 	SeparationBorderDrag = GetPrivateProfileBool("Display", "Window Split Border Drag", true, IniName);
+	#else
+	SeparationBorderDrag = GetPrivateProfileBool("Display", "Window Split Border Drag", false, IniName);
+	#endif
+	
 	ScreenGapColor = GetPrivateProfileInt("Display", "ScreenGapColor", 0xFFFFFF, IniName);
 	FrameLimit = GetPrivateProfileBool("FrameLimit", "FrameLimit", true, IniName);
 	CommonSettings.showGpu.main = GetPrivateProfileInt("Display", "MainGpu", 1, IniName) != 0;
@@ -3323,9 +4782,20 @@ int _main()
 	if (KeyInDelayMSec < KeyInRepeatMSec)
 		KeyInDelayMSec = KeyInRepeatMSec;
 
+	#ifndef X432R_TOUCHINPUT_ENABLED
 	hKeyInputTimer = timeSetEvent (KeyInRepeatMSec, 0, KeyInputTimer, 0, TIME_PERIODIC);
-
+	#else
+	X432R::InitTouchInput();
+	#endif
+	
+	#ifndef X432R_CUSTOMRENDERER_ENABLED
 	cur3DCore = GetPrivateProfileInt("3D", "Renderer", GPU3D_DEFAULT, IniName);
+	#else
+	cur3DCore = GetPrivateProfileInt("X432R", "Renderer", GPU3D_DEFAULT, IniName);
+	
+	X432R::RGBA8888::InitBlendColorTable();
+	#endif
+
 	if(cur3DCore == GPU3D_NULL_SAVED)
 		cur3DCore = GPU3D_NULL;
 	else if(cur3DCore == GPU3D_NULL) // this value shouldn't be saved anymore
@@ -3363,6 +4833,20 @@ int _main()
 		CommonSettings.SPU_sync_mode = GetPrivateProfileInt("Sound","SynchMode",0,IniName);
 	if (cmdline._spu_sync_method == -1)
 		CommonSettings.SPU_sync_method = GetPrivateProfileInt("Sound","SynchMethod",0,IniName);	
+	
+	#ifdef X432R_MENUITEMMOD_ENABLED
+	#ifdef X432R_OPENGL_TEXTUREFILTER_ENABLED
+	X432R::openGLTextureFilterEnabled = ( GetPrivateProfileBool("X432R", "OpenGLTextureFilterEnabled", false, IniName) );
+	#endif
+	
+	X432R::ChangeSoundEnabled( GetPrivateProfileBool("X432R", "SoundEnabled", X432R::soundOutputEnabled, IniName) );
+	X432R::cpuPowerSavingEnabled = GetPrivateProfileBool("X432R", "CpuPowerSavingEnabled", X432R::cpuPowerSavingEnabled, IniName);
+//	X432R::showMenubarInFullScreen = GetPrivateProfileBool("X432R", "ShowMenubarInFullScreen", X432R::showMenubarInFullScreen, IniName);
+	#endif
+	
+	#ifdef X432R_MENUITEMMOD_ENABLED2
+	X432R::showMenubarInFullScreen = GetPrivateProfileBool("X432R", "ShowMenubarInFullScreen", X432R::showMenubarInFullScreen, IniName);
+	#endif
 	
 	CommonSettings.DebugConsole = GetPrivateProfileBool("Emulation", "DebugConsole", false, IniName);
 	CommonSettings.EnsataEmulation = GetPrivateProfileBool("Emulation", "EnsataEmulation", false, IniName);
@@ -3431,7 +4915,21 @@ int _main()
 		HK_StateLoadSlot(load, true);
 	}
 
+	#ifndef X432R_MENUITEMMOD_ENABLED2
 	MainWindow->Show(SW_NORMAL);
+	#else
+	if( GetPrivateProfileBool("X432R","WindowFullScreen", false, IniName) )
+	{
+//		ToggleFullscreen();
+		SetStyle( GetStyle() | DWS_FULLSCREEN );
+		MainWindow->Show(SW_MAXIMIZE);
+	}
+	else if( GetPrivateProfileBool("X432R","WindowMaximized", false, IniName) )
+		MainWindow->Show(SW_MAXIMIZE);
+	
+	else
+		MainWindow->Show(SW_NORMAL);
+	#endif
 
 	//DEBUG TEST HACK
 	//driver->VIEW3D_Init();
@@ -3456,7 +4954,9 @@ int _main()
 	//LogStop();
 #endif
 
+	#ifndef X432R_TOUCHINPUT_ENABLED
 	timeKillEvent(hKeyInputTimer);
+	#endif
 
 	GInfo_DeInit();
 
@@ -3626,6 +5126,10 @@ void UpdateScreenRects()
 // re-run the aspect ratio calculations if enabled
 void FixAspectRatio()
 {
+	#ifdef X432R_MENUITEMMOD_ENABLED2
+	if( (MainWindow == NULL) || IsZoomed( MainWindow->getHWnd() ) || ( GetStyle() & DWS_FULLSCREEN ) ) return;
+	#endif
+	
 	if(windowSize != 0)
 	{
 		ScaleScreen(windowSize, false);
@@ -3966,11 +5470,17 @@ LRESULT OpenFile()
 	{
 		if(path.savelastromvisit)
 		{
+			#ifndef X432R_FILEPATHMOD_ENABLED
 			char *lchr, buffer[MAX_PATH];
 			ZeroMemory(buffer, sizeof(buffer));
 
 			lchr = strrchr(filename, '\\');
 			strncpy(buffer, filename, strlen(filename) - strlen(lchr));
+			#else
+			char buffer[MAX_PATH] = {0};
+			strncpy( buffer, filename, sizeof(buffer) );
+			PathRemoveFileSpec(buffer);
+			#endif
 			
 			path.setpath(path.ROMS, buffer);
 			WritePathSettings();
@@ -4522,6 +6032,7 @@ LRESULT CALLBACK WindowProcedure (HWND hwnd, UINT message, WPARAM wParam, LPARAM
 			//TODO - change how the gpu visibility flags work
 
 			//Filters
+			#ifndef X432R_CUSTOMRENDERER_ENABLED
 			MainWindow->checkMenu(IDM_RENDER_NORMAL, video.currentfilter == video.NONE );
 			MainWindow->checkMenu(IDM_RENDER_LQ2X, video.currentfilter == video.LQ2X );
 			MainWindow->checkMenu(IDM_RENDER_LQ2XS, video.currentfilter == video.LQ2XS );
@@ -4545,6 +6056,65 @@ LRESULT CALLBACK WindowProcedure (HWND hwnd, UINT message, WPARAM wParam, LPARAM
 			MainWindow->checkMenu(IDM_RENDER_3XBRZ, video.currentfilter == video._3XBRZ );
 			MainWindow->checkMenu(IDM_RENDER_4XBRZ, video.currentfilter == video._4XBRZ );
 			MainWindow->checkMenu(IDM_RENDER_5XBRZ, video.currentfilter == video._5XBRZ );
+			#else
+			const bool highreso = X432R::IsHighResolutionRendererSelected();
+			const u32 render_magnification = X432R::GetCurrentRenderMagnification();
+			
+			MainWindow->checkMenu(IDM_RENDER_NORMAL,						 highreso || (video.currentfilter == video.NONE) );
+			MainWindow->checkMenu(IDM_RENDER_LQ2X,							!highreso && (video.currentfilter == video.LQ2X) );
+			MainWindow->checkMenu(IDM_RENDER_LQ2XS,							!highreso && (video.currentfilter == video.LQ2XS) );
+			MainWindow->checkMenu(IDM_RENDER_HQ2X,							!highreso && (video.currentfilter == video.HQ2X) );
+			MainWindow->checkMenu(IDM_RENDER_HQ4X,							!highreso && (video.currentfilter == video.HQ4X) );
+			MainWindow->checkMenu(IDM_RENDER_HQ2XS,							!highreso && (video.currentfilter == video.HQ2XS) );
+			MainWindow->checkMenu(IDM_RENDER_2XSAI,							!highreso && (video.currentfilter == video._2XSAI) );
+			MainWindow->checkMenu(IDM_RENDER_SUPER2XSAI,					!highreso && (video.currentfilter == video.SUPER2XSAI) );
+			MainWindow->checkMenu(IDM_RENDER_SUPEREAGLE,					!highreso && (video.currentfilter == video.SUPEREAGLE) );
+			MainWindow->checkMenu(IDM_RENDER_SCANLINE,						!highreso && (video.currentfilter == video.SCANLINE) );
+			MainWindow->checkMenu(IDM_RENDER_BILINEAR,						!highreso && (video.currentfilter == video.BILINEAR) );
+			MainWindow->checkMenu(IDM_RENDER_NEAREST2X,						!highreso && (video.currentfilter == video.NEAREST2X) );
+			MainWindow->checkMenu(IDM_RENDER_EPX,							!highreso && (video.currentfilter == video.EPX) );
+			MainWindow->checkMenu(IDM_RENDER_EPXPLUS,						!highreso && (video.currentfilter == video.EPXPLUS) );
+			MainWindow->checkMenu(IDM_RENDER_EPX1POINT5,					!highreso && (video.currentfilter == video.EPX1POINT5) );
+			MainWindow->checkMenu(IDM_RENDER_EPXPLUS1POINT5,				!highreso && (video.currentfilter == video.EPXPLUS1POINT5) );
+			MainWindow->checkMenu(IDM_RENDER_NEAREST1POINT5,				!highreso && (video.currentfilter == video.NEAREST1POINT5) );
+			MainWindow->checkMenu(IDM_RENDER_NEARESTPLUS1POINT5,			!highreso && (video.currentfilter == video.NEARESTPLUS1POINT5) );
+			MainWindow->checkMenu(IDM_RENDER_2XBRZ,							!highreso && (video.currentfilter == video._2XBRZ) );
+			MainWindow->checkMenu(IDM_RENDER_3XBRZ,							!highreso && (video.currentfilter == video._3XBRZ) );
+			MainWindow->checkMenu(IDM_RENDER_4XBRZ,							!highreso && (video.currentfilter == video._4XBRZ) );
+			MainWindow->checkMenu(IDM_RENDER_5XBRZ,							!highreso && (video.currentfilter == video._5XBRZ) );
+			DesEnableMenuItem(mainMenu, IDM_RENDER_NORMAL,					!highreso);
+			DesEnableMenuItem(mainMenu, IDM_RENDER_LQ2X,					!highreso);
+			DesEnableMenuItem(mainMenu, IDM_RENDER_LQ2XS,					!highreso);
+			DesEnableMenuItem(mainMenu, IDM_RENDER_HQ2X,					!highreso);
+			DesEnableMenuItem(mainMenu, IDM_RENDER_HQ4X,					!highreso);
+			DesEnableMenuItem(mainMenu, IDM_RENDER_HQ2XS,					!highreso);
+			DesEnableMenuItem(mainMenu, IDM_RENDER_2XSAI,					!highreso);
+			DesEnableMenuItem(mainMenu, IDM_RENDER_SUPER2XSAI,				!highreso);
+			DesEnableMenuItem(mainMenu, IDM_RENDER_SUPEREAGLE,				!highreso);
+			DesEnableMenuItem(mainMenu, IDM_RENDER_SCANLINE,				!highreso);
+			DesEnableMenuItem(mainMenu, IDM_RENDER_BILINEAR,				!highreso);
+			DesEnableMenuItem(mainMenu, IDM_RENDER_NEAREST2X,				!highreso);
+			DesEnableMenuItem(mainMenu, IDM_RENDER_EPX,						!highreso);
+			DesEnableMenuItem(mainMenu, IDM_RENDER_EPXPLUS,					!highreso);
+			DesEnableMenuItem(mainMenu, IDM_RENDER_EPX1POINT5,				!highreso);
+			DesEnableMenuItem(mainMenu, IDM_RENDER_EPXPLUS1POINT5,			!highreso);
+			DesEnableMenuItem(mainMenu, IDM_RENDER_NEAREST1POINT5,			!highreso);
+			DesEnableMenuItem(mainMenu, IDM_RENDER_NEARESTPLUS1POINT5,		!highreso);
+			DesEnableMenuItem(mainMenu, IDM_RENDER_2XBRZ,					!highreso);
+			DesEnableMenuItem(mainMenu, IDM_RENDER_3XBRZ,					!highreso);
+			DesEnableMenuItem(mainMenu, IDM_RENDER_4XBRZ,					!highreso);
+			DesEnableMenuItem(mainMenu, IDM_RENDER_5XBRZ,					!highreso);
+			
+			MainWindow->checkMenu( X432R_MENUITEM_CHANGERESOLUTION_X1,		(render_magnification == 1) );
+			MainWindow->checkMenu( X432R_MENUITEM_CHANGERESOLUTION_X2,		(render_magnification == 2) );
+			MainWindow->checkMenu( X432R_MENUITEM_CHANGERESOLUTION_X3,		(render_magnification == 3) );
+			MainWindow->checkMenu( X432R_MENUITEM_CHANGERESOLUTION_X4,		(render_magnification == 4) );
+			
+			#ifdef X432R_CUSTOMRENDERER_DEBUG
+			MainWindow->checkMenu(X432R_MENUITEM_ENABLEDEBUGMODE,			X432R::debugModeEnabled);
+			DesEnableMenuItem(mainMenu, X432R_MENUITEM_ENABLEDEBUGMODE,		highreso);
+			#endif
+			#endif
 
 			MainWindow->checkMenu(IDC_STATEREWINDING, staterewindingenabled == 1 );
 
@@ -4591,6 +6161,36 @@ LRESULT CALLBACK WindowProcedure (HWND hwnd, UINT message, WPARAM wParam, LPARAM
 
 			// Tools
 			MainWindow->checkMenu(IDM_CONSOLE_ALWAYS_ON_TOP, gConsoleTopmost);
+
+			#ifndef X432R_CUSTOMRENDERER_ENABLED
+			bool softrast_selected = (cur3DCore == GPU3D_SWRAST);
+			#else
+			const bool softrast_selected = X432R::IsSoftRasterzierSelected();
+			#endif
+			
+			#ifdef X432R_MENUITEMMOD_ENABLED
+			#ifdef X432R_OPENGL_TEXTUREFILTER_ENABLED
+			MainWindow->checkMenu( X432R_MENUITEM_OPENGL_TEXTUREFILTER, X432R::openGLTextureFilterEnabled );
+			DesEnableMenuItem( mainMenu, X432R_MENUITEM_OPENGL_TEXTUREFILTER, !softrast_selected );
+			#endif
+			
+			MainWindow->checkMenu(X432R_MENUITEM_NORESIZE, GetStyle() & DWS_NORESIZE);
+//			MainWindow->checkMenu(X432R_MENUITEM_SHOWMENUBAR_IN_FULLSCREEN, X432R::showMenubarInFullScreen);
+			
+			MainWindow->checkMenu(X432R_MENUITEM_SOFTRASTERIZER, softrast_selected);
+			
+			MainWindow->checkMenu(X432R_MENUITEM_SOUNDOUTPUT, X432R::soundOutputEnabled);
+			DesEnableMenuItem(mainMenu, X432R_MENUITEM_SOUNDOUTPUT, sndcoretype != 0);
+			
+			MainWindow->checkMenu(X432R_MENUITEM_CPUPOWERSAVING, X432R::cpuPowerSavingEnabled);
+			
+			MainWindow->checkMenu(X432R_MENUITEM_SHOWCONSOLE, gShowConsole);
+			DesEnableMenuItem(mainMenu, IDM_CONSOLE_ALWAYS_ON_TOP, gShowConsole);
+			#endif
+			
+			#ifdef X432R_MENUITEMMOD_ENABLED2
+			MainWindow->checkMenu(X432R_MENUITEM_SHOWMENUBAR_IN_FULLSCREEN, X432R::showMenubarInFullScreen);
+			#endif
 
 			UpdateHotkeyAssignments();	//Add current hotkey mappings to menu item names
 
@@ -4643,6 +6243,17 @@ LRESULT CALLBACK WindowProcedure (HWND hwnd, UINT message, WPARAM wParam, LPARAM
 			NDS_Pause();
 			if (true/*AskSave()*/)	//Ask Save comes from the Ram Watch dialog.  The dialog uses .wch files and this allows asks the user if he wants to save changes first, should he cancel, closing will not happen
 			{
+				#ifdef X432R_MENUITEMMOD_ENABLED2
+				const bool fullscreen_mode = GetStyle() & DWS_FULLSCREEN;
+				const bool window_maximized = IsZoomed(hwnd) && !fullscreen_mode;
+				
+				WritePrivateProfileBool("X432R","WindowFullScreen", fullscreen_mode, IniName);
+				WritePrivateProfileBool("X432R","WindowMaximized", window_maximized, IniName);
+				
+				if(window_maximized || fullscreen_mode)
+					ShowWindow(hwnd, SW_NORMAL);		// 最大化状態を解除してSaveWindowSize()を実行できるようにする（フルスクリーンモードだとうまく動作しない？）
+				#endif
+				
 				//Save window size
 				WritePrivateProfileInt("Video","Window Size",windowSize,IniName);
 				if (windowSize==0)
@@ -4685,6 +6296,11 @@ LRESULT CALLBACK WindowProcedure (HWND hwnd, UINT message, WPARAM wParam, LPARAM
 			else
 				NDS_UnPause();
 			delete MainWindowToolbar;
+			
+			#ifdef X432R_TOUCHINPUT_ENABLED
+			X432R::DeinitTouchInput();
+			#endif
+			
 			return 0;
 		}
 	case WM_MOVING:
@@ -4848,7 +6464,11 @@ LRESULT CALLBACK WindowProcedure (HWND hwnd, UINT message, WPARAM wParam, LPARAM
 
 	case WM_KEYDOWN:
 		//MainWindowToolbar->Show(false);
+		
+		#ifndef X432R_TOUCHINPUT_ENABLED
 		input_acquire();
+		#endif
+		
 		if(wParam != VK_PAUSE)
 			break;
 	
@@ -4871,6 +6491,7 @@ DOKEYDOWN:
 
 			if(message == WM_SYSKEYDOWN && wParam==VK_RETURN && !(lParam&0x40000000))
 			{
+				#ifndef X432R_MENUITEMMOD_ENABLED2
 				//having aspect ratio correction enabled during fullscreen switch causes errors to happen.
 				//90% sure this is because the aspect ratio correction calculations happens with the wrong frame/menu/nonclient properties in place.
 				//if we ToggleFullscreen before the ShowWindow() here, then the ShowWindow() will wreck the fullscreening.
@@ -4881,6 +6502,9 @@ DOKEYDOWN:
 					ShowWindow(hwnd,SW_NORMAL); //maximize and fullscreen get mixed up so make sure no maximize now. IOW, alt+enter from fullscreen should never result in a maximized state
 				ToggleFullscreen();
 				ForceRatio = oldForceRatio;
+				#else
+				ToggleFullscreen();		// 上記のコメントによると、この変更により不具合が出る可能性がある？
+				#endif
 			}
 			else
 			{
@@ -4912,7 +6536,11 @@ DOKEYDOWN:
 				return 0;
 			}
 		}
+		
+		#ifndef X432R_TOUCHINPUT_ENABLED
 		input_acquire();
+		#endif
+		
 		if(wParam != VK_PAUSE)
 			break;
 	case WM_SYSKEYUP:
@@ -4947,6 +6575,7 @@ DOKEYDOWN:
 
 				if(wParam==SIZE_MAXIMIZED)
 				{
+					#ifndef X432R_MENUITEMMOD_ENABLED2
 					RECT fullscreen;
 					GetClientRect(hwnd,&fullscreen);
 					int fswidth = fullscreen.right-fullscreen.left;
@@ -4964,6 +6593,7 @@ DOKEYDOWN:
 					int xfudge = (fswidth-fakewidth)/2;
 					int yfudge = (fsheight-fakeheight)/2;
 					OffsetRect(&FullScreenRect,xfudge,yfudge);
+					#endif
 				}
 				else if(wParam==SIZE_RESTORED)
 				{
@@ -5090,6 +6720,11 @@ DOKEYDOWN:
 	case WM_MOUSEMOVE:
 	case WM_LBUTTONDOWN:
 	case WM_LBUTTONDBLCLK:
+		
+		#ifdef X432R_TOUCHINPUT_ENABLED
+		if( X432R::IsMouseEventFromTouch() ) return 0;			// タッチ入力で発生したイベントを無視
+		#endif
+		
 		if (wParam & MK_LBUTTON)
 		{
 			SetCapture(hwnd);
@@ -5108,8 +6743,19 @@ DOKEYDOWN:
 			{
 				if ((video.layout == 2) && ((video.swap == 0) || (video.swap == 2 && !MainScreen.offset) || (video.swap == 3 && MainScreen.offset))) return 0;
 				ToDSScreenRelativeCoords(x,y,1);
+				
+				#ifndef X432R_TOUCHINPUT_ENABLED
 				if(x<0) x = 0; else if(x>255) x = 255;
 				if(y<0) y = 0; else if(y>192) y = 192;
+				#else
+				if(userTouchesScreen)
+				{
+					x = clamp(x, 0, 255);
+					y = clamp(y, 0, 191);
+				}
+				else if( (x < 0) || (x > 255) || (y < 0) || (y > 191) ) return 0;		// 下画面の範囲外で発生したマウスクリックを無視
+				#endif
+				
 				NDS_setTouchPos(x, y);
 				winLastTouch.x = x;
 				winLastTouch.y = y;
@@ -5124,12 +6770,78 @@ DOKEYDOWN:
 
 	case WM_LBUTTONUP:
 
+		#ifdef X432R_TOUCHINPUT_ENABLED
+		if( X432R::IsMouseEventFromTouch() ) return 0;			// タッチ入力で発生したイベントを無視
+		#endif
+
 		ReleaseCapture();
 		HudClickRelease(&Hud);
 		if (!StylusAutoHoldPressed)
 			NDS_releaseTouch();
 		userTouchesScreen = false;
 		return 0;
+
+	#ifdef X432R_TOUCHINPUT_ENABLED
+	case WM_TOUCH:
+	{
+		UINT touch_count = LOWORD(wParam);
+		if(touch_count != 1) return 0;
+		
+//		TOUCHINPUT touch_inputs[16];
+		TOUCHINPUT touch_input;
+		
+//		if( X432R::GetTouchInputInfo( (HTOUCHINPUT)lParam, 16, touch_inputs, sizeof(TOUCHINPUT) ) )
+		if( X432R::GetTouchInputInfo( (HTOUCHINPUT)lParam, 1, &touch_input, sizeof(TOUCHINPUT) ) )
+		{
+//			TOUHCHINPUT touch_input = touch_inputs[0];
+			POINT touch_location;
+			HWND main_window_handle = MainWindow->getHWnd();
+			
+			touch_location.x = TOUCH_COORD_TO_PIXEL(touch_input.x);
+			touch_location.y = TOUCH_COORD_TO_PIXEL(touch_input.y);
+			ScreenToClient(main_window_handle, &touch_location);
+			
+			s32 touch_x = touch_location.x;
+			s32 touch_y = touch_location.y;
+			
+			UnscaleScreenCoords(touch_x, touch_y);
+			
+			if( (touch_input.dwFlags & TOUCHEVENTF_DOWN) || (touch_input.dwFlags & TOUCHEVENTF_MOVE) )
+			{
+				if( (video.layout == 2) && ( (video.swap == 0) || (video.swap == 2 && !MainScreen.offset) || (video.swap == 3 && MainScreen.offset) ) )
+					return 0;
+				
+				ToDSScreenRelativeCoords(touch_x, touch_y, 1);
+				
+				if(userTouchesScreen)
+				{
+					touch_x = clamp(touch_x, 0, 255);
+					touch_y = clamp(touch_y, 0, 191);
+				}
+				else if( (touch_x < 0) || (touch_x > 255) || (touch_y < 0) || (touch_y > 191) ) return 0;	// 下画面の範囲外で発生したTOUCHEVENTF_DOWNを無視
+				
+				NDS_setTouchPos(touch_x, touch_y);
+				winLastTouch.x = touch_x;
+				winLastTouch.y = touch_y;
+				userTouchesScreen = true;
+			}
+			
+			if(touch_input.dwFlags & TOUCHEVENTF_UP)
+			{
+			//	if( !StylusAutoHoldPressed )
+			//		NDS_releaseTouch();
+				
+			//	userTouchesScreen = false;
+				
+				X432R::SetDelayedTouchUp();
+			}
+			
+			X432R::CloseTouchInputHandle( (HTOUCHINPUT)lParam );
+		}
+		
+		return 0;
+	}
+	#endif
 
 #if 0
 	case WM_INITMENU: {
@@ -5720,12 +7432,22 @@ DOKEYDOWN:
 			return 0;
 		case ID_LCDS_HORIZONTAL:
 			if (video.layout == 1) return 0;
+			
+			#ifdef X432R_CUSTOMRENDERER_ENABLED
+			SetRotate(hwnd, 0);		// 高解像度レンダラ使用時、rotateが0以外の時にHorizontalを選択すると描画位置がおかしくなる？
+			#endif
+			
 			video.layout = 1;
 			doLCDsLayout();
 			return 0;
 
 		case ID_LCDS_ONE:
 			if (video.layout == 2) return 0;
+			
+			#ifdef X432R_CUSTOMRENDERER_ENABLED
+			SetRotate(hwnd, 0);
+			#endif
+			
 			video.layout = 2;
 			doLCDsLayout();
 			return 0;
@@ -5822,6 +7544,30 @@ DOKEYDOWN:
 			allowBackgroundInput = !allowBackgroundInput;
 			WritePrivateProfileInt("Controls", "AllowBackgroundInput", (int)allowBackgroundInput, IniName);
 			return 0;
+
+		#ifdef X432R_CUSTOMRENDERER_ENABLED
+		case X432R_MENUITEM_CHANGERESOLUTION_X1:
+			X432R::ChangeRenderMagnification(1);
+			break;
+		
+		case X432R_MENUITEM_CHANGERESOLUTION_X2:
+			X432R::ChangeRenderMagnification(2);
+			break;
+		
+		case X432R_MENUITEM_CHANGERESOLUTION_X3:
+			X432R::ChangeRenderMagnification(3);
+			break;
+		
+		case X432R_MENUITEM_CHANGERESOLUTION_X4:
+			X432R::ChangeRenderMagnification(4);
+			break;
+		
+		#ifdef X432R_CUSTOMRENDERER_DEBUG
+		case X432R_MENUITEM_ENABLEDEBUGMODE:
+			X432R::debugModeEnabled = !X432R::debugModeEnabled;
+			break;
+		#endif
+		#endif
 
 		case ID_DISPLAYMETHOD_VSYNC:
 			SetStyle(GetStyle()^DWS_VSYNC);
@@ -6094,6 +7840,11 @@ DOKEYDOWN:
 			ForceRatio = (!ForceRatio)?TRUE:FALSE;
 			if(ForceRatio)
 				FixAspectRatio();
+			
+			#ifdef X432R_MENUITEMMOD_ENABLED2
+			UpdateWndRects(hwnd);
+			#endif
+			
 			WritePrivateProfileInt("Video","Window Force Ratio",ForceRatio,IniName);
 			break;
 
@@ -6108,13 +7859,104 @@ DOKEYDOWN:
 				RECT rc; 
 				GetClientRect(hwnd, &rc);
 
+				#ifdef X432R_MENUITEMMOD_ENABLED
+				if( GetStyle() & DWS_NORESIZE )
+				{
+					SetStyle( GetStyle() ^ DWS_NORESIZE );
+					WritePrivateProfileBool("X432R", "NoResize", ( GetStyle() & DWS_NORESIZE ) != 0, IniName);
+				}
+				#endif
+				
 				SetStyle(GetStyle()^DWS_LOCKDOWN);
 
 				MainWindow->setClientSize(rc.right-rc.left, rc.bottom-rc.top);
 
 				WritePrivateProfileBool("Video", "Window Lockdown", (GetStyle()&DWS_LOCKDOWN)!=0, IniName);
+				
+				#ifdef X432R_MENUITEMMOD_ENABLED2
+				UpdateWndRects(hwnd);
+				#endif
 			}
 			return 0;
+		
+		#ifdef X432R_MENUITEMMOD_ENABLED
+		case X432R_MENUITEM_NORESIZE:
+			{
+				RECT rc; 
+				
+				GetClientRect(hwnd, &rc);
+				
+				if( GetStyle() & DWS_LOCKDOWN )
+				{
+					SetStyle( GetStyle() ^ DWS_LOCKDOWN );
+					WritePrivateProfileBool("Video", "Window Lockdown", ( GetStyle() & DWS_LOCKDOWN ) != 0, IniName);
+				}
+				
+				SetStyle( GetStyle() ^ DWS_NORESIZE );
+				
+				MainWindow->setClientSize(rc.right-rc.left, rc.bottom-rc.top);
+				
+				WritePrivateProfileBool("X432R", "NoResize", ( GetStyle() & DWS_NORESIZE ) != 0, IniName);
+				
+				#ifdef X432R_MENUITEMMOD_ENABLED2
+				UpdateWndRects(hwnd);
+				#endif
+			}
+			return 0;
+		
+/*		case X432R_MENUITEM_SHOWMENUBAR_IN_FULLSCREEN:
+			X432R::showMenubarInFullScreen = !X432R::showMenubarInFullScreen;
+			WritePrivateProfileBool("X432R", "ShowMenubarInFullScreen", X432R::showMenubarInFullScreen, IniName);
+			break;
+*/		
+		case X432R_MENUITEM_SOFTRASTERIZER:
+			{
+				void HK_ToggleRasterizer(int, bool justPressed);
+				
+				HK_ToggleRasterizer(0, false);
+			}
+			break;
+		
+		#ifdef X432R_OPENGL_TEXTUREFILTER_ENABLED
+		case X432R_MENUITEM_OPENGL_TEXTUREFILTER:
+			X432R::openGLTextureFilterEnabled = !X432R::openGLTextureFilterEnabled;
+			WritePrivateProfileBool("X432R", "OpenGLTextureFilterEnabled", X432R::openGLTextureFilterEnabled, IniName);
+			break;
+		#endif
+		
+		case X432R_MENUITEM_SOUNDOUTPUT:
+			X432R::HK_ToggleSoundEnabledKeyDown(0, false);
+			break;
+		
+		case X432R_MENUITEM_CPUPOWERSAVING:
+			X432R::cpuPowerSavingEnabled = !X432R::cpuPowerSavingEnabled;
+			WritePrivateProfileBool("X432R", "CpuPowerSavingEnabled", X432R::cpuPowerSavingEnabled, IniName);
+			break;
+		
+		case X432R_MENUITEM_SHOWCONSOLE:
+			{
+				gShowConsole = !gShowConsole;
+				
+				if(gShowConsole)
+				{
+					OpenConsole();			// Init debug console
+					ConsoleAlwaysTop(gConsoleTopmost);
+				}
+				else
+					CloseConsole();
+				
+				WritePrivateProfileBool("Console", "Show", gShowConsole, IniName);
+			}
+			return 0;
+		#endif
+		
+		#ifdef X432R_MENUITEMMOD_ENABLED2
+		case X432R_MENUITEM_SHOWMENUBAR_IN_FULLSCREEN:
+			X432R::showMenubarInFullScreen = !X432R::showMenubarInFullScreen;
+			WritePrivateProfileBool("X432R", "ShowMenubarInFullScreen", X432R::showMenubarInFullScreen, IniName);
+			break;
+		#endif
+		
 		case IDM_ALWAYS_ON_TOP:
 			{
 				SetStyle(GetStyle()^DWS_ALWAYSONTOP);
@@ -6240,8 +8082,24 @@ DOKEYDOWN:
 
 void Change3DCoreWithFallbackAndSave(int newCore)
 {
+/*	#if defined(X432R_CUSTOMRENDERER_ENABLED) || defined(X432R_TOUCHINPUT_ENABLED) || defined(X432R_MENUITEMMOD_ENABLED) || defined(X432R_FILEPATHMOD_ENABLED)
+	const u32 max_index = ( sizeof(core3DList) / sizeof( core3DList[0] ) ) - 1;
+	
+	if( (newCore >= max_index) || ( core3DList[newCore] == NULL ) )
+		newCore = GPU3D_SWRAST;
+	#endif
+*/	
+	#ifndef X432R_CUSTOMRENDERER_ENABLED
+	if( (newCore < 0) || (newCore > GPU3D_OPENGL_OLD) )
+		newCore = GPU3D_SWRAST;
+	#else
+	if( (newCore < 0) || (newCore > GPU3D_SWRAST_X4) )
+		newCore = GPU3D_SWRAST;
+	#endif
+	
 	printf("Attempting change to 3d core to: %s\n",core3DList[newCore]->name);
 
+	#ifndef X432R_CUSTOMRENDERER_ENABLED
 	if(newCore == GPU3D_OPENGL_OLD)
 		goto TRY_OGL_OLD;
 
@@ -6275,6 +8133,49 @@ TRY_SWRAST:
 DONE:
 	int gpu3dSaveValue = ((cur3DCore != GPU3D_NULL) ? cur3DCore : GPU3D_NULL_SAVED);
 	WritePrivateProfileInt("3D", "Renderer", gpu3dSaveValue, IniName);
+	#else
+	switch(newCore)
+	{
+		case GPU3D_NULL:
+			NDS_3D_ChangeCore(GPU3D_NULL);
+			break;
+		
+		case GPU3D_OPENGL_X2:
+		case GPU3D_OPENGL_X3:
+		case GPU3D_OPENGL_X4:
+		case GPU3D_SWRAST_X2:
+		case GPU3D_SWRAST_X3:
+		case GPU3D_SWRAST_X4:
+			if(video.currentfilter != video.NONE)
+			{
+//				Lock lock (win_backbuffer_sync);
+				video.setfilter(video.NONE);
+				FilterUpdate( MainWindow->getHWnd() );
+			}
+		
+		case GPU3D_OPENGL_3_2:
+			if( NDS_3D_ChangeCore(newCore) ) break;
+			
+			printf("falling back to 3d core: %s\n", core3DList[GPU3D_OPENGL_OLD]->name);
+		
+		case GPU3D_OPENGL_OLD:
+			if( NDS_3D_ChangeCore(GPU3D_OPENGL_OLD) ) break;
+			
+			printf("falling back to 3d core: %s\n", core3DList[GPU3D_SWRAST]->name);
+		
+		default:
+			NDS_3D_ChangeCore(GPU3D_SWRAST);
+			break;
+	}
+	
+	int gpu3dSaveValue = ( (cur3DCore != GPU3D_NULL) ? cur3DCore : GPU3D_NULL_SAVED );
+	
+//	WritePrivateProfileInt("3D", "Renderer", gpu3dSaveValue, IniName);
+	WritePrivateProfileInt("X432R", "Renderer", gpu3dSaveValue, IniName);
+	
+	if( (gpu3D != NULL) && (osd != NULL) )
+		osd->addLine("%s", gpu3D->name);
+	#endif
 }
 
 LRESULT CALLBACK HUDFontSettingsDlgProc(HWND hw, UINT msg, WPARAM wp, LPARAM lp)
@@ -6980,6 +8881,11 @@ static LRESULT CALLBACK SoundSettingsDlgProc(HWND hDlg, UINT uMsg, WPARAM wParam
 					//write spu advanced
 					CommonSettings.spu_advanced = IsDlgCheckboxChecked(hDlg,IDC_SPU_ADVANCED);
 					WritePrivateProfileBool("Sound","SpuAdvanced",CommonSettings.spu_advanced,IniName);
+
+					#ifdef X432R_MENUITEMMOD_ENABLED
+					X432R::soundOutputEnabled = true;
+					WritePrivateProfileBool("X432R","SoundOutputEnabled", true, IniName);
+					#endif
 
 					return TRUE;
 				}
