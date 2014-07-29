@@ -950,7 +950,7 @@ static void WIFI_PreTXAdjustments(u32 slot)
 
 	// Calculate and set FCS
 	u32 crc32 = WIFI_calcCRC32((u8*)&wifiMac.RAM[address + 6], txLen - 4);
-	*(u32*)&wifiMac.RAM[address + 6 + ((txLen-4) >> 1)] = crc32;
+	*(u32*)&wifiMac.RAM[address + 6 + ((txLen/*-4*/) >> 1)] = crc32;
 }
 
 void WIFI_write16(u32 address, u16 val)
