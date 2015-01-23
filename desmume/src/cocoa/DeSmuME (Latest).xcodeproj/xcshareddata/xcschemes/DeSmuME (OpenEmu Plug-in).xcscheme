@@ -1,6 +1,5 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <Scheme
-   LastUpgradeVersion = "0440"
    version = "1.3">
    <BuildAction
       parallelizeBuildables = "YES"
@@ -14,10 +13,10 @@
             buildForAnalyzing = "YES">
             <BuildableReference
                BuildableIdentifier = "primary"
-               BlueprintIdentifier = "AB796CA415CDCBA200C59155"
-               BuildableName = "DeSmuME.app"
-               BlueprintName = "DeSmuME (OS X App)"
-               ReferencedContainer = "container:DeSmuME (XCode 4).xcodeproj">
+               BlueprintIdentifier = "ABB3C6461501BC6D00E0C22E"
+               BuildableName = "DeSmuME.oecoreplugin"
+               BlueprintName = "DeSmuME (OpenEmu Plug-in)"
+               ReferencedContainer = "container:DeSmuME (Latest).xcodeproj">
             </BuildableReference>
          </BuildActionEntry>
       </BuildActionEntries>
@@ -29,15 +28,6 @@
       buildConfiguration = "Debug">
       <Testables>
       </Testables>
-      <MacroExpansion>
-         <BuildableReference
-            BuildableIdentifier = "primary"
-            BlueprintIdentifier = "AB796CA415CDCBA200C59155"
-            BuildableName = "DeSmuME.app"
-            BlueprintName = "DeSmuME (OS X App)"
-            ReferencedContainer = "container:DeSmuME (XCode 4).xcodeproj">
-         </BuildableReference>
-      </MacroExpansion>
    </TestAction>
    <LaunchAction
       selectedDebuggerIdentifier = "Xcode.DebuggerFoundation.Debugger.LLDB"
@@ -48,15 +38,6 @@
       ignoresPersistentStateOnLaunch = "NO"
       debugDocumentVersioning = "YES"
       allowLocationSimulation = "YES">
-      <BuildableProductRunnable>
-         <BuildableReference
-            BuildableIdentifier = "primary"
-            BlueprintIdentifier = "AB796CA415CDCBA200C59155"
-            BuildableName = "DeSmuME.app"
-            BlueprintName = "DeSmuME (OS X App)"
-            ReferencedContainer = "container:DeSmuME (XCode 4).xcodeproj">
-         </BuildableReference>
-      </BuildableProductRunnable>
       <AdditionalOptions>
       </AdditionalOptions>
    </LaunchAction>
@@ -66,15 +47,6 @@
       useCustomWorkingDirectory = "NO"
       buildConfiguration = "Release"
       debugDocumentVersioning = "YES">
-      <BuildableProductRunnable>
-         <BuildableReference
-            BuildableIdentifier = "primary"
-            BlueprintIdentifier = "AB796CA415CDCBA200C59155"
-            BuildableName = "DeSmuME.app"
-            BlueprintName = "DeSmuME (OS X App)"
-            ReferencedContainer = "container:DeSmuME (XCode 4).xcodeproj">
-         </BuildableReference>
-      </BuildableProductRunnable>
    </ProfileAction>
    <AnalyzeAction
       buildConfiguration = "Debug">

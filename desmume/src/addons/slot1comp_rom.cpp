@@ -1,5 +1,5 @@
 /*
-	Copyright (C) 2010-2013 DeSmuME team
+	Copyright (C) 2010-2015 DeSmuME team
 
 	This file is free software: you can redistribute it and/or modify
 	it under the terms of the GNU General Public License as published by
@@ -16,8 +16,9 @@
 */
 
 #include "slot1comp_rom.h"
-#include "MMU.h"
-#include "NDSSystem.h"
+
+#include "../NDSSystem.h"
+#include "../emufile.h"
 
 
 void Slot1Comp_Rom::start(eSlot1Operation operation, u32 addr)
@@ -41,8 +42,12 @@ u32 Slot1Comp_Rom::read()
 	case eSlot1Operation_2x_SecureAreaLoad:
 		{
 			//see B7 for details
-			address &= gameInfo.mask; //sanity check
-			u32 ret = LE_TO_LOCAL_32(*(u32*)(gameInfo.secureArea + (address - 0x4000)));
+
+			//zero 15-sep-2014 - this is meaningless. newer mask is actually reasonable
+			//address &= gameInfo.mask; //sanity check 
+			u32 secureAreaAddress = (address - 0x4000);
+			secureAreaAddress &= 0x3FFF; //memory safe sanity test
+			u32 ret = LE_TO_LOCAL_32(*(u32*)(gameInfo.secureArea + secureAreaAddress));
 			address = (address&~0xFFF) + ((address+4)&0xFFF);
 			return ret;
 		}
@@ -66,7 +71,7 @@ u32 Slot1Comp_Rom::read()
 			//if (address > gameInfo.header.endROMoffset)
 			//  ... the cart hardware doesnt know anything about the rom header. if it has a totally bogus endROMoffset, the cart will probably work just fine. and, the +4 is missing anyway:
 			//3. this is better: it just allows us to read 0xFF anywhere we dont have rom data. forget what the header says
-			if(address+4 >= gameInfo.romsize)
+			if(address+4 > gameInfo.romsize)
 			{
 				DEBUG_Notify.ReadBeyondEndOfCart(address,gameInfo.romsize);
 				return 0xFFFFFFFF;

@@ -1,7 +1,7 @@
 /*
 	Copyright (C) 2006 yopyop
 	Copyright (C) 2007 shash
-	Copyright (C) 2007-2014 DeSmuME team
+	Copyright (C) 2007-2015 DeSmuME team
 
 	This file is free software: you can redistribute it and/or modify
 	it under the terms of the GNU General Public License as published by
@@ -23,13 +23,16 @@
 #include <assert.h>
 #include <sstream>
 
+#include "armcpu.h"
 #include "common.h"
 #include "debug.h"
+#include "driver.h"
 #include "NDSSystem.h"
 #include "cp15.h"
 #include "wifi.h"
 #include "registers.h"
 #include "render3D.h"
+#include "FIFO.h"
 #include "gfx3d.h"
 #include "rtc.h"
 #include "mc.h"
@@ -41,6 +44,8 @@
 #include "MMU_timing.h"
 #include "firmware.h"
 #include "encrypt.h"
+#include "GPU.h"
+#include "SPU.h"
 
 #ifdef DO_ASSERT_UNALIGNED
 #define ASSERT_UNALIGNED(x) assert(x)
@@ -1259,6 +1264,29 @@ void MMU_GC_endTransfer(u32 PROCNUM)
 		NDS_makeIrq(PROCNUM, IRQ_BIT_GC_TRANSFER_COMPLETE);
 }
 
+void GC_Command::print()
+{
+	GCLOG("%02X%02X%02X%02X%02X%02X%02X%02X\n",bytes[0],bytes[1],bytes[2],bytes[3],bytes[4],bytes[5],bytes[6],bytes[7]);
+}
+
+void GC_Command::toCryptoBuffer(u32 buf[2])
+{
+	u8 temp[8] = { bytes[7], bytes[6], bytes[5], bytes[4], bytes[3], bytes[2], bytes[1], bytes[0] };
+	buf[0] = T1ReadLong(temp,0);
+	buf[1] = T1ReadLong(temp,4);
+}
+
+void GC_Command::fromCryptoBuffer(u32 buf[2])
+{
+	bytes[7] = (buf[0]>>0)&0xFF;
+	bytes[6] = (buf[0]>>8)&0xFF;
+	bytes[5] = (buf[0]>>16)&0xFF;
+	bytes[4] = (buf[0]>>24)&0xFF;
+	bytes[3] = (buf[1]>>0)&0xFF;
+	bytes[2] = (buf[1]>>8)&0xFF;
+	bytes[1] = (buf[1]>>16)&0xFF;
+	bytes[0] = (buf[1]>>24)&0xFF;
+}
 
 template<int PROCNUM>
 void FASTCALL MMU_writeToGCControl(u32 val)
@@ -2057,6 +2085,11 @@ u32 MMU_struct_new::read_dma(const int proc, const int size, const u32 _adr)
 	return temp;
 }
 
+bool MMU_struct_new::is_dma(const u32 adr)
+{
+	return adr >= _REG_DMA_CONTROL_MIN && adr <= _REG_DMA_CONTROL_MAX;
+}
+
 MMU_struct_new::MMU_struct_new()
 {
 	for(int i=0;i<2;i++)
@@ -2064,6 +2097,36 @@ MMU_struct_new::MMU_struct_new()
 			dma[i][j].procnum = i;
 			dma[i][j].chan = j;
 		}
+}
+
+void DivController::savestate(EMUFILE* os)
+{
+	write8le(&mode,os);
+	write8le(&busy,os);
+	write8le(&div0,os);
+}
+
+bool DivController::loadstate(EMUFILE* is, int version)
+{
+	int ret = 1;
+	ret &= read8le(&mode,is);
+	ret &= read8le(&busy,is);
+	ret &= read8le(&div0,is);
+	return ret==1;
+}
+
+void SqrtController::savestate(EMUFILE* os)
+{
+	write8le(&mode,os);
+	write8le(&busy,os);
+}
+
+bool SqrtController::loadstate(EMUFILE* is, int version)
+{
+	int ret=1;
+	ret &= read8le(&mode,is);
+	ret &= read8le(&busy,is);
+	return ret==1;
 }
 
 bool DmaController::loadstate(EMUFILE* f)
@@ -2181,7 +2244,7 @@ void DmaController::exec()
 
 	//printf("ARM%c DMA%d execute, count %08X, mode %d%s\n", procnum?'7':'9', chan, wordcount, startmode, running?" - RUNNING":"");
 	//we'll need to unfreeze the arm9 bus now
-	if(procnum==ARMCPU_ARM9) nds.freezeBus &= ~(FREEZEBUS_FLAG_ARM9_DMA0<<chan);
+	if(procnum==ARMCPU_ARM9) nds.freezeBus &= ~(1<<(chan+1));
 
 	dmaCheck = FALSE;
 
@@ -2330,7 +2393,7 @@ void DmaController::doCopy()
 	//freeze the ARM9 bus for the duration of this DMA
 	//thats not entirely accurate
 	if(procnum==ARMCPU_ARM9) 
-		nds.freezeBus |= (FREEZEBUS_FLAG_ARM9_DMA0<<chan);
+		nds.freezeBus |= (1<<(chan+1));
 		
 	//write back the addresses
 	saddr = src;
@@ -4009,7 +4072,7 @@ void FASTCALL _MMU_ARM9_write32(u32 adr, u32 val)
 			case 0x40005B:
 			case 0x40005C:		// Individual Commands
 				if (gxFIFO.size > 254)
-					nds.freezeBus |= FREEZEBUS_FLAG_GXFIFO_JAMMED;
+					nds.freezeBus |= 1;
 
 				((u32 *)(MMU.MMU_MEM[ARMCPU_ARM9][0x40]))[(adr & 0xFFF) >> 2] = val;
 				gfx3d_sendCommand(adr, val);
@@ -4391,6 +4454,26 @@ u8 FASTCALL _MMU_ARM9_read08(u32 adr)
 			case REG_SQRTCNT+2: printf("ERROR 8bit SQRTCNT+2 READ\n"); return 0;
 			case REG_SQRTCNT+3: printf("ERROR 8bit SQRTCNT+3 READ\n"); return 0;
 
+			//these aren't readable
+			case REG_DISPA_BG0HOFS: case REG_DISPA_BG0HOFS+1:
+			case REG_DISPA_BG1HOFS: case REG_DISPA_BG1HOFS+1:
+			case REG_DISPA_BG2HOFS: case REG_DISPA_BG2HOFS+1:
+			case REG_DISPA_BG3HOFS: case REG_DISPA_BG3HOFS+1:
+			case REG_DISPB_BG0HOFS: case REG_DISPB_BG0HOFS+1:
+			case REG_DISPB_BG1HOFS: case REG_DISPB_BG1HOFS+1:
+			case REG_DISPB_BG2HOFS: case REG_DISPB_BG2HOFS+1:
+			case REG_DISPB_BG3HOFS: case REG_DISPB_BG3HOFS+1:
+			case REG_DISPA_BG0VOFS: case REG_DISPA_BG0VOFS+1:
+			case REG_DISPA_BG1VOFS: case REG_DISPA_BG1VOFS+1:
+			case REG_DISPA_BG2VOFS: case REG_DISPA_BG2VOFS+1:
+			case REG_DISPA_BG3VOFS: case REG_DISPA_BG3VOFS+1:
+			case REG_DISPB_BG0VOFS: case REG_DISPB_BG0VOFS+1:
+			case REG_DISPB_BG1VOFS: case REG_DISPB_BG1VOFS+1:
+			case REG_DISPB_BG2VOFS: case REG_DISPB_BG2VOFS+1:
+			case REG_DISPB_BG3VOFS: case REG_DISPB_BG3VOFS+1:
+				return 0;
+
+
 			//Nostalgia's options menu requires that these work
 			case REG_DIVCNT: return (MMU_new.div.read16() & 0xFF);
 			case REG_DIVCNT+1: return ((MMU_new.div.read16()>>8) & 0xFF);
@@ -4462,6 +4545,13 @@ u16 FASTCALL _MMU_ARM9_read16(u32 adr)
 		{
 			case REG_DISPA_DISPSTAT:
 				break;
+
+			//these aren't readable
+			case REG_DISPA_BG0HOFS: case REG_DISPA_BG1HOFS: case REG_DISPA_BG2HOFS: case REG_DISPA_BG3HOFS:
+			case REG_DISPB_BG0HOFS: case REG_DISPB_BG1HOFS: case REG_DISPB_BG2HOFS: case REG_DISPB_BG3HOFS:
+			case REG_DISPA_BG0VOFS: case REG_DISPA_BG1VOFS: case REG_DISPA_BG2VOFS: case REG_DISPA_BG3VOFS:
+			case REG_DISPB_BG0VOFS: case REG_DISPB_BG1VOFS: case REG_DISPB_BG2VOFS: case REG_DISPB_BG3VOFS:
+				return 0;
 
 			case REG_SQRTCNT: return MMU_new.sqrt.read16();
 			//sqrtcnt isnt big enough for this to exist. but it'd probably return 0 so its ok
@@ -4572,6 +4662,12 @@ u32 FASTCALL _MMU_ARM9_read32(u32 adr)
 			case 0x04004008:
 				if(!nds.Is_DSI()) break;
 				return 0x8000;
+
+			//these aren't readable.
+			//note: ratatouille stage 3 begins testing this.. it will write a 256, then read it, and if it reads back a 256, the 3d display will be scrolled invisibly. it needs to read a 0 to cause an unscrolled 3d display.
+			case REG_DISPA_BG0HOFS: case REG_DISPA_BG1HOFS: case REG_DISPA_BG2HOFS: case REG_DISPA_BG3HOFS:
+			case REG_DISPB_BG0HOFS: case REG_DISPB_BG1HOFS: case REG_DISPB_BG2HOFS: case REG_DISPB_BG3HOFS:
+				return 0;
 
 			case REG_DISPA_DISPSTAT:
 				break;
@@ -5461,30 +5557,34 @@ static void FASTCALL arm7_write32(void *data, u32 adr, u32 val) {
 /*
  * the base memory interfaces
  */
-struct armcpu_memory_iface arm9_base_memory_iface = {
-  arm9_prefetch32,
-  arm9_prefetch16,
-
-  arm9_read8,
-  arm9_read16,
-  arm9_read32,
-
-  arm9_write8,
-  arm9_write16,
-  arm9_write32
+const armcpu_memory_iface arm9_base_memory_iface = {
+	arm9_prefetch32,
+	arm9_prefetch16,
+	
+	arm9_read8,
+	arm9_read16,
+	arm9_read32,
+	
+	arm9_write8,
+	arm9_write16,
+	arm9_write32,
+	
+	NULL
 };
 
-struct armcpu_memory_iface arm7_base_memory_iface = {
-  arm7_prefetch32,
-  arm7_prefetch16,
-
-  arm7_read8,
-  arm7_read16,
-  arm7_read32,
-
-  arm7_write8,
-  arm7_write16,
-  arm7_write32
+const armcpu_memory_iface arm7_base_memory_iface = {
+	arm7_prefetch32,
+	arm7_prefetch16,
+	
+	arm7_read8,
+	arm7_read16,
+	arm7_read32,
+	
+	arm7_write8,
+	arm7_write16,
+	arm7_write32,
+	
+	NULL
 };
 
 /*
@@ -5492,17 +5592,19 @@ struct armcpu_memory_iface arm7_base_memory_iface = {
  * This avoids the ARM9 protection unit when accessing
  * memory.
  */
-struct armcpu_memory_iface arm9_direct_memory_iface = {
-  NULL,
-  NULL,
-
-  arm9_read8,
-  arm9_read16,
-  arm9_read32,
-
-  arm9_write8,
-  arm9_write16,
-  arm9_write32
+const armcpu_memory_iface arm9_direct_memory_iface = {
+	NULL,
+	NULL,
+	
+	arm9_read8,
+	arm9_read16,
+	arm9_read32,
+	
+	arm9_write8,
+	arm9_write16,
+	arm9_write32,
+	
+	NULL
 };
 
 

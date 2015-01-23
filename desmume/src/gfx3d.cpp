@@ -1,6 +1,6 @@
 /*	
 	Copyright (C) 2006 yopyop
-	Copyright (C) 2008-2014 DeSmuME team
+	Copyright (C) 2008-2015 DeSmuME team
 
 	This file is free software: you can redistribute it and/or modify
 	it under the terms of the GNU General Public License as published by
@@ -28,13 +28,18 @@
 //if they do, then we need to copy them out in doFlush!!!
 //---------------
 
-#include <algorithm>
+#include "gfx3d.h"
+
 #include <assert.h>
 #include <math.h>
 #include <string.h>
+#include <algorithm>
+#include <queue>
+
 #include "armcpu.h"
 #include "debug.h"
-#include "gfx3d.h"
+#include "driver.h"
+#include "emufile.h"
 #include "matrix.h"
 #include "bits.h"
 #include "MMU.h"
@@ -46,7 +51,6 @@
 #include "readwrite.h"
 #include "FIFO.h"
 #include "movie.h" //only for currframecounter which really ought to be moved into the core emu....
-#include <queue>
 
 //#define _SHOW_VTX_COUNTERS	// show polygon/vertex counters on screen
 #ifdef _SHOW_VTX_COUNTERS
@@ -112,7 +116,6 @@ public:
 
 	void receive(u32 val) 
 	{
-
 		//so, it seems as if the dummy values and restrictions on the highest-order command in the packed command set 
 		//is solely about some unknown internal timing quirk, and not about the logical behaviour of the state machine.
 		//it's possible that writing some values too quickly can result in the gxfifo not being ready. 
@@ -305,7 +308,7 @@ static float normalTable[1024];
 #define fix2float(v)    (((float)((s32)(v))) / (float)(1<<12))
 #define fix10_2float(v) (((float)((s32)(v))) / (float)(1<<9))
 
-CACHE_ALIGN u8 gfx3d_convertedScreen[256*192*4];
+CACHE_ALIGN u8 gfx3d_convertedScreen[GFX3D_FRAMEBUFFER_WIDTH*GFX3D_FRAMEBUFFER_HEIGHT*4];
 
 // Matrix stack handling
 CACHE_ALIGN MatrixStack	mtxStack[4] = {
@@ -458,6 +461,44 @@ static void makeTables() {
 				int temp = (r*a + oldr*(31-a)) / 31;
 				mixTable555[a][r][oldr] = temp;
 			}
+}
+
+#define OSWRITE(x) os->fwrite((char*)&(x),sizeof((x)));
+#define OSREAD(x) is->fread((char*)&(x),sizeof((x)));
+
+void POLY::save(EMUFILE* os)
+{
+	OSWRITE(type);
+	OSWRITE(vertIndexes[0]); OSWRITE(vertIndexes[1]); OSWRITE(vertIndexes[2]); OSWRITE(vertIndexes[3]);
+	OSWRITE(polyAttr); OSWRITE(texParam); OSWRITE(texPalette);
+	OSWRITE(viewport);
+	OSWRITE(miny);
+	OSWRITE(maxy);
+}
+
+void POLY::load(EMUFILE* is)
+{
+	OSREAD(type);
+	OSREAD(vertIndexes[0]); OSREAD(vertIndexes[1]); OSREAD(vertIndexes[2]); OSREAD(vertIndexes[3]);
+	OSREAD(polyAttr); OSREAD(texParam); OSREAD(texPalette);
+	OSREAD(viewport);
+	OSREAD(miny);
+	OSREAD(maxy);
+}
+
+void VERT::save(EMUFILE* os)
+{
+	OSWRITE(x); OSWRITE(y); OSWRITE(z); OSWRITE(w);
+	OSWRITE(u); OSWRITE(v);
+	OSWRITE(color[0]); OSWRITE(color[1]); OSWRITE(color[2]);
+	OSWRITE(fcolor[0]); OSWRITE(fcolor[1]); OSWRITE(fcolor[2]);
+}
+void VERT::load(EMUFILE* is)
+{
+	OSREAD(x); OSREAD(y); OSREAD(z); OSREAD(w);
+	OSREAD(u); OSREAD(v);
+	OSREAD(color[0]); OSREAD(color[1]); OSREAD(color[2]);
+	OSREAD(fcolor[0]); OSREAD(fcolor[1]); OSREAD(fcolor[2]);
 }
 
 void gfx3d_init()
@@ -1974,19 +2015,16 @@ void gfx3d_execute3D()
 	u8	cmd = 0;
 	u32	param = 0;
 
-	if(nds.freezeBus & FREEZEBUS_FLAG_GXFLUSH_JAMMED)
-	{
-		//sanity check: in case a command went into the fifo but the cpu should be frozen, do nothing
-		return;
-	}
+#ifndef FLUSHMODE_HACK
+	if (isSwapBuffers) return;
+#endif
 
 	//this is a SPEED HACK
 	//fifo is currently emulated more accurately than it probably needs to be.
 	//without this batch size the emuloop will escape way too often to run fast.
 	const int HACK_FIFO_BATCH_SIZE = 64;
 
-	for(int i=0;i<HACK_FIFO_BATCH_SIZE;i++)
-	{
+	for(int i=0;i<HACK_FIFO_BATCH_SIZE;i++) {
 		if(GFX_PIPErecv(&cmd, &param))
 		{
 			//if (isSwapBuffers) printf("Executing while swapbuffers is pending: %d:%08X\n",cmd,param);
@@ -2026,7 +2064,7 @@ void gfx3d_glFlush(u32 v)
 #endif
 	
 	isSwapBuffers = TRUE;
-	
+
 	//printf("%05d:%03d:%12lld: FLUSH\n",currFrameCounter, nds.VCount, nds_timer);
 	
 	//well, the game wanted us to flush.
@@ -2183,8 +2221,6 @@ void gfx3d_VBlankSignal()
 #endif
 		GFX_DELAY(392);
 		isSwapBuffers = FALSE;
-		//GX processing can proceed once more. I think it was important that the GFX_DELAY above ran, to reschedule 3d
-		nds.freezeBus &= ~FREEZEBUS_FLAG_GXFLUSH_JAMMED;
 	}
 }
 
@@ -2319,12 +2355,12 @@ void gfx3d_GetLineData(int line, u8** dst)
 void gfx3d_GetLineData15bpp(int line, u16** dst)
 {
 	//TODO - this is not very thread safe!!!
-	static u16 buf[256];
+	static u16 buf[GFX3D_FRAMEBUFFER_WIDTH];
 	*dst = buf;
 
 	u8* lineData;
 	gfx3d_GetLineData(line, &lineData);
-	for(int i=0;i<256;i++)
+	for(int i=0; i<GFX3D_FRAMEBUFFER_WIDTH; i++)
 	{
 		const u8 r = lineData[i*4+0];
 		const u8 g = lineData[i*4+1];
@@ -2421,7 +2457,7 @@ SFORMAT SF_GFX3D[]={
 	{ "GTVC", 4, 1, &tempVertInfo.count},
 	{ "GTVM", 4, 4, tempVertInfo.map},
 	{ "GTVF", 4, 1, &tempVertInfo.first},
-	{ "G3CX", 1, 4*256*192, gfx3d_convertedScreen},
+	{ "G3CX", 1, 4*GFX3D_FRAMEBUFFER_WIDTH*GFX3D_FRAMEBUFFER_HEIGHT, gfx3d_convertedScreen},
 	{ 0 }
 };
 

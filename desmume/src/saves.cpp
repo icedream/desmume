@@ -2,7 +2,7 @@
 	Copyright (C) 2006 Normmatt
 	Copyright (C) 2006 Theo Berkau
 	Copyright (C) 2007 Pascal Giard
-	Copyright (C) 2008-2013 DeSmuME team
+	Copyright (C) 2008-2015 DeSmuME team
 
 	This file is free software: you can redistribute it and/or modify
 	it under the terms of the GNU General Public License as published by
@@ -28,11 +28,18 @@
 #include <sys/stat.h>
 #include <time.h>
 #include <fstream>
+
+#include "common.h"
+#include "armcpu.h"
+#include "registers.h"
+#include "FIFO.h"
+#include "driver.h"
 #include "saves.h"
 #include "MMU.h"
 #include "NDSSystem.h"
 #include "render3D.h"
 #include "cp15.h"
+#include "GPU.h"
 #include "GPU_osd.h"
 #include "version.h"
 
@@ -43,6 +50,8 @@
 #include "MMU_timing.h"
 #include "slot1.h"
 #include "slot2.h"
+#include "SPU.h"
+#include "wifi.h"
 
 #include "path.h"
 
@@ -1150,7 +1159,7 @@ static bool ReadStateChunks(EMUFILE* is, s32 totalsize)
 			printf("\tSave created: %04d-%03s-%02d %s %02d:%02d:%02d\n", tm.get_Year(), DateTime::GetNameOfMonth(tm.get_Month()), tm.get_Day(), wday[tm.get_DayOfWeek()%7], tm.get_Hour(), tm.get_Minute(), tm.get_Second());
 		}
 		printf("\tGame title: %s\n", buf);
-		printf("\tGame code: %c%c%c%c\n", header.gameCode[3], header.gameCode[2], header.gameCode[1], header.gameCode[0]);
+		printf("\tGame code: %c%c%c%c\n", header.gameCode[0], header.gameCode[1], header.gameCode[2], header.gameCode[3]);
 		printf("\tMaker code: %c%c (0x%04X) - %s\n", header.makerCode & 0xFF, header.makerCode >> 8, header.makerCode, getDeveloperNameByID(header.makerCode).c_str());
 		printf("\tDevice capacity: %dMb (real size %dMb)\n", ((128 * 1024) << header.cardSize) / (1024 * 1024), romsize / (1024 * 1024));
 		printf("\tCRC16: %04Xh\n", header.CRC16);
