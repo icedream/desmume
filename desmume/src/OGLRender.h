@@ -647,7 +647,6 @@ namespace X432R
 	class OpenGLRenderer_X432 : public OpenGLRenderer_2_1
 	{
 		protected:
-		
 		GLuint highResolutionFramebuffer;
 		GLuint highResolutionRenderbuffer_Color;
 		GLuint highResolutionRenderbuffer_DepthStencil;
@@ -662,7 +661,18 @@ namespace X432R
 		bool glFogEnabled;
 		#endif
 		
-		template <u32 RENDER_MAGNIFICATION> void DownscaleFramebuffer(const u32 * const source_buffer);
+		#if defined(X432R_OPENGL_CUSTOMSTENCILTEST) && ( !defined(X432R_OPENGL_2PASSSHADOW_TEST) || defined(X432R_CUSTOMRENDERER_DEBUG) )
+		std::vector<u8> shadowPolygonIDs;
+		#endif
+		#ifdef X432R_OPENGL_CUSTOMSTENCILTEST2
+		bool isCurrentTextureTranslucent;
+		#endif
+		
+		template <u32 RENDER_MAGNIFICATION> void DownscaleFramebuffer(const u32 * const sourcebuffer_begin);
+		
+		#ifdef X432R_OPENGL_2PASSSHADOW_TEST
+		void SetupShadowPolygon(const POLY *thePoly, bool first_pass);
+		#endif
 		
 		
 		template <u32 RENDER_MAGNIFICATION> Render3DError CreatePBOs();
@@ -690,17 +700,12 @@ namespace X432R
 		#endif
 		virtual Render3DError ClearUsingValues(const u8 r, const u8 g, const u8 b, const u8 a, const u32 clearDepth, const u8 clearStencil) const;
 		
+		virtual Render3DError SetupPolygon(const POLY *thePoly);
+		template <u32 RENDER_MAGNIFICATION> Render3DError SetupTexture(const POLY *thePoly, bool enableTexturing);
 		template <u32 RENDER_MAGNIFICATION> Render3DError SetupViewport(const POLY *thePoly);
-		
-		#ifdef X432R_OPENGL_FOG_ENABLED
-//		virtual Render3DError LoadShaderPrograms(std::string *outVertexShaderProgram, std::string *outFragmentShaderProgram);
-		#endif
 		
 		
 		public:
-		
-		static bool ExperimentalFogEnabled;
-		
 		
 		OpenGLRenderer_X432();
 		template <u32 RENDER_MAGNIFICATION> Render3DError InitExtensions();

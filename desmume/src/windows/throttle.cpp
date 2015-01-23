@@ -259,3 +259,17 @@ int AutoFrameSkip_GetSkipAmount(int min, int max)
 }
 
 
+#ifdef X432R_MENUITEMMOD_ENABLED
+namespace X432R
+{
+	void SetTargetFps(const float target_fps)
+	{
+		const float scale = target_fps / 60.0f;
+		
+		desiredfps = core_desiredfps * scale;
+		desiredspf = 65536.0f / desiredfps;
+		
+		osd->addLine("Target FPS: %2.02f", scale);
+	}
+}
+#endif

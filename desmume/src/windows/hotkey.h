@@ -120,6 +120,8 @@ struct SCustomKeys
 	
 	#ifdef X432R_MENUITEMMOD_ENABLED
 	SCustomKey ToggleSoundEnabled;
+	SCustomKey ToggleDecreaseSpeed30;
+	SCustomKey ToggleDecreaseSpeed15;
 	#endif
 	
 	SCustomKey LastItem; // dummy, must be last

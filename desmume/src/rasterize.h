@@ -108,9 +108,6 @@ public:
 //	void InitFramebuffer(const bool clear_image);
 	template <u32 RENDER_MAGNIFICATION>
 	void InitFramebuffer(const u32 width, const u32 height, const bool clear_image);
-	
-	template <u32 RENDER_MAGNIFICATION, bool FOG_ALPHA_ONLY>
-	void DrawFog_forHighResolution();
 	#endif
 };
 

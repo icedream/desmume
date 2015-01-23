@@ -939,6 +939,22 @@ static void SetStyle(u32 dws)
 	else 
 		SetMenu(window_handle, mainMenu);
 	#endif
+	
+	#ifdef X432R_DISPLAYMETHOD_OPENGL_DISABLED
+	if(dws & DWS_OPENGL)
+	{
+		Lock lock (win_backbuffer_sync);
+		dws = (dws & ~DWS_DISPMETHODS) | DWS_DDRAW_SW;
+		WritePrivateProfileInt("Video", "Display Method", DISPMETHOD_DDRAW_SW, IniName);
+		ddraw.createSurfaces(window_handle);
+	}
+	
+	if(dws & DWS_FILTER)
+	{
+		dws &= ~DWS_FILTER;
+		WritePrivateProfileInt("Video", "Display Method Filter", 0, IniName);
+	}
+	#endif
 
 	currWindowStyle = dws;
 	HWND insertAfter = HWND_NOTOPMOST;
@@ -1569,6 +1585,7 @@ static void DD_FillRect(LPDIRECTDRAWSURFACE7 surf, int left, int top, int right,
 	surf->Blt(&r,NULL,NULL,DDBLT_COLORFILL | DDBLT_WAIT,&fx);
 }
 
+#ifndef X432R_DISPLAYMETHOD_OPENGL_DISABLED
 struct GLDISPLAY
 {
 	HGLRC privateContext;
@@ -1627,23 +1644,19 @@ struct GLDISPLAY
 	}
 } gldisplay;
 
-
 #include <GL/gl.h>
 #include <GL/glext.h>
-
 static void OGL_DoDisplay()
 {
-	#ifndef X432R_CUSTOMRENDERER_ENABLED
 	if(!gldisplay.begin()) return;
 
+	#ifndef X432R_CUSTOMRENDERER_ENABLED
 	static GLuint tex = 0;
 	if(tex == 0)
 		glGenTextures(1,&tex);
 
 	glBindTexture(GL_TEXTURE_2D,tex);
 	#else
-	if( !gldisplay.begin() ) return;
-	
 	glBindTexture( GL_TEXTURE_2D, X432R::GetScreenTexture() );
 	#endif
 
@@ -1802,6 +1815,7 @@ static void OGL_DoDisplay()
 
 	gldisplay.end();
 }
+#endif
 
 //the directdraw final presentation portion of display, including rotating
 static void DD_DoDisplay()
@@ -2034,7 +2048,7 @@ namespace X432R
 	{
 		bool S9xGetState(WORD KeyIdent);
 		
-		bool is_background = ( MainWindow->getHWnd() != GetForegroundWindow() );
+		const bool is_background = ( MainWindow->getHWnd() != GetForegroundWindow() );
 		
 		if( is_background && !allowBackgroundInput ) return;
 //		if( is_background && !allowBackgroundHotkeys ) return;
@@ -2094,7 +2108,7 @@ namespace X432R
 				if(customkey->handleKeyDown != NULL)
 				{
 					customkey->handleKeyDown(customkey->param, true);
-					break;		// 重複割り当てされたホットキーを無視する
+					break;		// 重複割り当てされたホットキーを無視する
 				}
 			}
 			else if( !key_pressed && last_pressed )
@@ -2115,10 +2129,6 @@ namespace X432R
 #ifdef X432R_MENUITEMMOD_ENABLED
 namespace X432R
 {
-	#ifdef X432R_OPENGL_TEXTUREFILTER_ENABLED
-	bool openGLTextureFilterEnabled = false;
-	#endif
-	
 	static bool soundOutputEnabled = true;
 	bool cpuPowerSavingEnabled = false;
 	
@@ -2135,7 +2145,7 @@ namespace X432R
 		soundOutputEnabled = enable;
 	}
 	
-	void HK_ToggleSoundEnabledKeyDown(int, bool justPressed)
+	void HK_ToggleSoundEnabledKeyDown(int, bool just_pressed)
 	{
 		ChangeSoundEnabled( !soundOutputEnabled );
 		
@@ -2144,30 +2154,65 @@ namespace X432R
 		if(osd != NULL)
 			osd->addLine(soundOutputEnabled ? "Sound enabled" : "Sound disabled");
 	}
+	
+	
+	void SetTargetFps(float target_fps);
+	
+	void HK_ToggleDecreaseSpeedKeyDown(int fps, bool just_pressed)
+	{
+		static u32 last_fps = 60;
+		
+		if(fps == last_fps)
+		{
+			SetTargetFps(60.0f);
+			last_fps = 60;
+		}
+		else
+		{
+			SetTargetFps(fps);
+			last_fps = fps;
+		}
+	}
 }
 #endif
 
 #ifdef X432R_CUSTOMRENDERER_ENABLED
+
+#if defined(_MSC_VER) && (_MSC_VER >= 1700)
+#ifdef X432R_PPL_TEST
+#include <ppl.h>
+#endif
+#endif
+
 namespace X432R
 {
-	#ifdef X432R_CUSTOMRENDERER_DEBUG
-	bool debugModeEnabled = true;
-	#endif
-	
-	
 	CRITICAL_SECTION customFrontBufferSync;
-//	static GLuint screenTexture[2] = {0};
-	static GLuint screenTexture = 0;
-	static GLuint hudTexture = 0;
-	static u32 lastRenderMagnification = 1;
 	
 	HighResolutionFramebuffers backBuffer;
+	
+	#ifndef X432R_DISPLAYMETHOD_OPENGL_DISABLED
+	static GLuint screenTexture = 0;
+	static GLuint hudTexture = 0;
+	
+	static u32 lastRenderMagnification = 1;
+	#endif
+	
 	static u32 frontBuffer[3][1024 * 768 * 2] = {0};
+	static u32 hudBuffer[256 * 192 * 2] = {0};
 	static u32 masterBrightness[3][2] = {0};
 	static bool isHighResolutionScreen[3][2] = {0};
-	static u32 hudBuffer[256 * 192 * 2] = {0};
 	
 	static volatile bool screenTextureUpdated = false;
+	
+	#ifdef X432R_LOWQUALITYMODE_TEST
+	bool lowQualityMsaaEnabled = false;
+	bool lowQualityAlphaBlendEnabled = false;
+	#endif
+	
+	#ifdef X432R_CUSTOMRENDERER_DEBUG
+	bool debugModeEnabled = true;
+	bool debugModeEnabled2 = false;
+	#endif
 	
 	
 	void ClearBuffers()
@@ -2254,9 +2299,6 @@ namespace X432R
 	//---------- debug ----------
 	
 	#ifdef X432R_PROCESSTIME_CHECK
-	#include <windows.h>
-	#include <mmsystem.h>
-	
 	inline void ProcessTimeCounter::Start()
 	{
 		startTime = timeGetTime();
@@ -2268,9 +2310,13 @@ namespace X432R
 		totalTime += ( timeGetTime() - startTime );
 	}
 	
-	inline void ProcessTimeCounter::Reset()
+	inline void ProcessTimeCounter::Reset(const u32 fps)
 	{
-		Time = totalTime;
+		if( (fps == 0) || (fps >= 60) )
+			Time = totalTime;
+		else
+			Time = totalTime * ( 60.0f / (float)fps );
+		
 //		Count = execCount;
 		
 		totalTime = 0;
@@ -2278,9 +2324,10 @@ namespace X432R
 	}
 	
 	ProcessTimeCounter timeCounter_3D;
+	ProcessTimeCounter timeCounter_3DFinish1;
+	ProcessTimeCounter timeCounter_3DFinish2;
 	ProcessTimeCounter timeCounter_2D;
 	ProcessTimeCounter timeCounter_2DHighReso;
-	ProcessTimeCounter timeCounter_3DFinish;
 	ProcessTimeCounter timeCounter_Final;
 	ProcessTimeCounter timeCounter_Display;
 	ProcessTimeCounter timeCounter_LockMain;
@@ -2311,20 +2358,22 @@ namespace X432R
 		#ifndef X432R_PROCESSTIME_CHECK
 		const std::string caption = windowCaption + std::to_string(fps) + "/" + std::to_string(fps3d);
 		#else
-		timeCounter_3D.Reset();
-		timeCounter_2D.Reset();
-		timeCounter_2DHighReso.Reset();
-		timeCounter_3DFinish.Reset();
-		timeCounter_Final.Reset();
-		timeCounter_Display.Reset();
-		timeCounter_LockMain.Reset();
-		timeCounter_LockDisp.Reset();
+		timeCounter_3D.Reset(fps);
+		timeCounter_3DFinish1.Reset(fps);
+		timeCounter_3DFinish2.Reset(fps);
+		timeCounter_2D.Reset(fps);
+		timeCounter_2DHighReso.Reset(fps);
+		timeCounter_Final.Reset(fps);
+		timeCounter_Display.Reset(fps);
+		timeCounter_LockMain.Reset(fps);
+		timeCounter_LockDisp.Reset(fps);
 		
 		std::string caption = std::to_string(fps) + "/" + std::to_string(fps3d);
-		caption += " " + std::to_string(timeCounter_3D.Time + timeCounter_2D.Time + timeCounter_Final.Time + timeCounter_LockMain.Time);
+		caption += " " + std::to_string(timeCounter_3D.Time + timeCounter_3DFinish2.Time + timeCounter_2D.Time + timeCounter_Final.Time + timeCounter_LockMain.Time);
 		caption += "(3:" + std::to_string(timeCounter_3D.Time);
-		caption += " 3F:" + std::to_string(timeCounter_3DFinish.Time);
-		caption += " 2:" + std::to_string(timeCounter_2D.Time - timeCounter_3DFinish.Time);
+		caption += " 3F1:" + std::to_string(timeCounter_3DFinish1.Time);
+		caption += " 3F2:" + std::to_string(timeCounter_3DFinish2.Time);
+		caption += " 2:" + std::to_string(timeCounter_2D.Time);
 		caption += " 2H:" + std::to_string(timeCounter_2DHighReso.Time);
 		caption += " F:" + std::to_string(timeCounter_Final.Time);
 		caption += " L:" + std::to_string(timeCounter_LockMain.Time);
@@ -2406,23 +2455,9 @@ namespace X432R
 	
 	static void ChangeRenderMagnification(u32 magnification)
 	{
-		if(magnification < 1)
-			magnification = 1;
+		const bool softrast = IsSoftRasterzierSelected();
 		
-		else if(magnification > 4)
-			magnification = 4;
-		
-		bool softrast = false;
-		
-		switch(cur3DCore)
-		{
-			case GPU3D_SWRAST:
-			case GPU3D_SWRAST_X2:
-			case GPU3D_SWRAST_X3:
-			case GPU3D_SWRAST_X4:
-				softrast = true;
-				break;
-		}
+//		magnification = clamp<u32>(magnification, 1, 4);
 		
 		switch(magnification)
 		{
@@ -2467,8 +2502,413 @@ namespace X432R
 	}
 	
 	
+	#ifdef X432R_SMOOTHINGFILTER_TEST
+	static u8 smoothingLevel = 0;
+	static bool ignoreHighResolutionArea_OnSmoothing = false;
+	
+	inline bool IsSmoothingFilterEnabled()
+	{
+		return (smoothingLevel > 0);
+	}
+	
+	struct RGBA8888_CompareAlpha
+	{
+		bool operator()(const RGBA8888 &color1, const RGBA8888 &color2) const
+		{
+			return (color1.A < color2.A);
+		}
+	};
+	
+	static inline void SetColorIntensity(RGBA8888 *color)
+	{
+		#if 1
+/*		static const float intensityCoefR = 0.2989f;
+		static const float intensityCoefG = 0.5866f;
+		static const float intensityCoefB = 0.1145f;
+		
+		color->A = (u8)( ( intensityCoefR * (float)color->R ) + ( intensityCoefG * (float)color->G ) + ( intensityCoefB * (float)color->B ) );
+*/		
+		static const u32 intensityCoefR = 76;
+		static const u32 intensityCoefG = 150;
+		static const u32 intensityCoefB = 30;
+		
+		color->A = (u8)( ( (intensityCoefR * color->R) + (intensityCoefG * color->G) + (intensityCoefB * color->B) ) >> 8 );
+		#else
+		color->A = (color->R + color->G + color->B) / 3;
+		#endif
+	}
+	
+	static inline bool CheckPixelDataEvenness(const u8 center_intensity, const RGBA8888 * const kernel_colors, const u32 y)
+	{
+		static u32 last_y = 0;
+		static bool is_uneven_area_0 = false;		// left top
+		static bool is_uneven_area_1 = false;		// right top
+		static bool is_uneven_area_2 = false;		// left bottom
+		static bool is_uneven_area_3 = false;		// right bottom
+		
+		if(y != last_y)
+		{
+			last_y = y;
+			is_uneven_area_0 = ( kernel_colors[0].A != center_intensity ) || ( kernel_colors[1].A != center_intensity ) || ( kernel_colors[3].A != center_intensity );
+			is_uneven_area_2 = ( kernel_colors[3].A != center_intensity ) || ( kernel_colors[6].A != center_intensity ) || ( kernel_colors[7].A != center_intensity );
+		}
+		else
+		{
+			is_uneven_area_0 = is_uneven_area_1;
+			is_uneven_area_2 = is_uneven_area_3;
+		}
+		
+		is_uneven_area_1 = ( kernel_colors[1].A != center_intensity ) || ( kernel_colors[2].A != center_intensity ) || ( kernel_colors[5].A != center_intensity );
+		is_uneven_area_3 = ( kernel_colors[5].A != center_intensity ) || ( kernel_colors[7].A != center_intensity ) || ( kernel_colors[8].A != center_intensity );
+		
+		if( !is_uneven_area_0 && !is_uneven_area_1 && !is_uneven_area_2 && !is_uneven_area_3 )
+			return true;
+		
+		if(ignoreHighResolutionArea_OnSmoothing && is_uneven_area_0 && is_uneven_area_1 && is_uneven_area_2 && is_uneven_area_3)
+			return true;
+		
+		return false;
+	}
+	
+	template <u32 RENDER_MAGNIFICATION, u8 SMOOTHING_LEVEL>
+	static inline RGBA8888 DD_GetSmoothedPixelData1(const u32 x, const u32 y, const u32 * const source_buffer)
+	{
+		// 3x3 gaussian
+		
+		#if 1
+		if( (x < 1) || ( x >= ( (256 * RENDER_MAGNIFICATION) - 1 ) ) || (y < 1) || ( y >= ( (192 * RENDER_MAGNIFICATION) - 1 ) ) )
+			return source_buffer[ (y * 256 * RENDER_MAGNIFICATION) + x ];
+		
+		const u32 y0 = (y - 1) * 256 * RENDER_MAGNIFICATION;
+		const u32 y1 = y * 256 * RENDER_MAGNIFICATION;
+		const u32 y2 = (y + 1) * 256 * RENDER_MAGNIFICATION;
+		const u32 x0 = x - 1;
+		const u32 x2 = x + 1;
+		#else
+		const u32 y0 = (u32)std::max<s32>( (s32)y - 1, 0 ) * 256 * RENDER_MAGNIFICATION;
+		const u32 y1 = y * 256 * RENDER_MAGNIFICATION;
+		const u32 y2 = (u32)std::min<s32>( (s32)y + 1, 192 * RENDER_MAGNIFICATION ) * 256 * RENDER_MAGNIFICATION;
+		const u32 x0 = (u32)std::max<s32>( (s32)x - 1, 0 );
+		const u32 x2 = (u32)std::min<s32>( (s32)x + 1, 256 * RENDER_MAGNIFICATION );
+		#endif
+		
+		
+/*		// sigma = 0.509
+		static const float coef0 = 0.6f;			// 48
+		static const float coef1 = 0.087f;			// 7
+		static const float coef2 = 0.0126f;			// 1
+		
+		// sigma = 0.563
+//		static const float coef0 = 0.5f;			// 25
+//		static const float coef1 = 0.1034f;			// 5
+//		static const float coef2 = 0.0213f;			// 1
+		
+		// sigma = 0.636
+//		static const float coef0 = 0.4f;			// 12
+//		static const float coef1 = 0.1162f;			// 3
+//		static const float coef2 = 0.0337f;			// 1
+		
+		// sigma = 0.751
+//		static const float coef0 = 0.3f;			// 12
+//		static const float coef1 = 0.1238f;			// 5
+//		static const float coef2 = 0.051f;			// 2
+		
+		// sigma = 0.849
+//		static const float coef0 = 0.25f;			// 4
+//		static const float coef1 = 0.125f;			// 2
+//		static const float coef2 = 0.0625f;			// 1
+*/		
+		static const u32 gaussian_coef1[9] =
+		{
+			1,		7,		1,
+			7,		48,		7,
+			1,		7,		1
+		};
+		
+		static const u32 gaussian_coef2[9] =
+		{
+			1,		3,		1,
+			3,		12,		3,
+			1,		3,		1
+		};
+		
+		static const u32 gaussian_coef3[9] =
+		{
+			2,		5,		2,
+			5,		12,		5,
+			2,		5,		2
+		};
+		
+		
+		RGBA8888 color = source_buffer[y1 + x];
+		
+		RGBA8888 colors[9] =
+		{
+			source_buffer[y0 + x0],		source_buffer[y0 + x],		source_buffer[y0 + x2],
+			source_buffer[y1 + x0],		color,						source_buffer[y1 + x2],
+			source_buffer[y2 + x0],		source_buffer[y2 + x],		source_buffer[y2 + x2]
+		};
+		
+		
+		if( CheckPixelDataEvenness(color.A, colors, y) )
+		{
+			color.A = 0xFF;
+			return color;
+		}
+		
+		u32 total_r = 0;
+		u32 total_g = 0;
+		u32 total_b = 0;
+		u32 total_coef = 0;
+		u32 intensity_delta, coef;
+		
+		
+		#define X432R_ADD_PIXELDATA1(gaussian_coef) \
+			for(u32 i = 0; i < 9; ++i) \
+			{ \
+				coef = gaussian_coef[i]; \
+				\
+				total_r += ( colors[i].R * coef ); \
+				total_g += ( colors[i].G * coef ); \
+				total_b += ( colors[i].B * coef ); \
+				\
+				total_coef += coef; \
+			}
+		
+		#define X432R_ADD_PIXELDATA2(gaussian_coef) \
+			for(u32 i = 0; i < 9; ++i) \
+			{ \
+				intensity_delta = ( 255 - abs(color.A - colors[i].A) ); \
+				coef = gaussian_coef[i] * intensity_delta; \
+				\
+				total_r += ( colors[i].R * coef ); \
+				total_g += ( colors[i].G * coef ); \
+				total_b += ( colors[i].B * coef ); \
+				\
+				total_coef += coef; \
+			}
+		
+		switch(SMOOTHING_LEVEL)
+		{
+			case 1:
+				X432R_ADD_PIXELDATA1(gaussian_coef1)		// gaussian
+				break;
+			
+			case 2:
+				X432R_ADD_PIXELDATA1(gaussian_coef2)
+				break;
+			
+			case 3:
+				X432R_ADD_PIXELDATA1(gaussian_coef3)
+				break;
+			
+			case 4:
+				X432R_ADD_PIXELDATA2(gaussian_coef1)		// bilateralƒ‚ƒhƒL (³‹K•ª•z‚ðŽg—p‚µ‚È‚¢)
+				break;
+			
+			case 5:
+				X432R_ADD_PIXELDATA2(gaussian_coef2)
+				break;
+			
+			case 6:
+				X432R_ADD_PIXELDATA2(gaussian_coef3)
+				break;
+		}
+		
+		
+		#undef X432R_ADD_PIXELDATA1
+		#undef X432R_ADD_PIXELDATA2
+		
+		
+		color.R = (u8)(total_r / total_coef);
+		color.G = (u8)(total_g / total_coef);
+		color.B = (u8)(total_b / total_coef);
+		color.A = 0xFF;
+		
+		return color;
+	}
+	
+	template <u32 RENDER_MAGNIFICATION, u8 SMOOTHING_LEVEL>
+	static inline RGBA8888 DD_GetSmoothedPixelData2(const u32 x, const u32 y, const u32 * const source_buffer)
+	{
+		// 3x3 Trimmed Mean
+		
+		
+		#if 1
+		if( (x < 1) || ( x >= ( (256 * RENDER_MAGNIFICATION) - 1 ) ) || (y < 1) || ( y >= ( (192 * RENDER_MAGNIFICATION) - 1 ) ) )
+			return source_buffer[ (y * 256 * RENDER_MAGNIFICATION) + x ];
+		
+		const u32 y0 = (y - 1) * 256 * RENDER_MAGNIFICATION;
+		const u32 y1 = y * 256 * RENDER_MAGNIFICATION;
+		const u32 y2 = (y + 1) * 256 * RENDER_MAGNIFICATION;
+		const u32 x0 = x - 1;
+		const u32 x2 = x + 1;
+		#else
+		const u32 y0 = (u32)std::max<s32>( (s32)y - 1, 0 ) * 256 * RENDER_MAGNIFICATION;
+		const u32 y1 = y * 256 * RENDER_MAGNIFICATION;
+		const u32 y2 = (u32)std::min<s32>( (s32)y + 1, 192 * RENDER_MAGNIFICATION ) * 256 * RENDER_MAGNIFICATION;
+		const u32 x0 = (u32)std::max<s32>( (s32)x - 1, 0 );
+		const u32 x2 = (u32)std::min<s32>( (s32)x + 1, 256 * RENDER_MAGNIFICATION );
+		#endif
+		
+		
+		RGBA8888 color = source_buffer[y1 + x];
+		
+		RGBA8888 colors[9] =
+		{
+			source_buffer[y0 + x0],		source_buffer[y0 + x],		source_buffer[y0 + x2],
+			source_buffer[y1 + x0],		color,						source_buffer[y1 + x2],
+			source_buffer[y2 + x0],		source_buffer[y2 + x],		source_buffer[y2 + x2]
+		};
+		
+		
+		if( CheckPixelDataEvenness(color.A, colors, y) )
+		{
+			color.A = 0xFF;
+			return color;
+		}
+		
+		
+		u32 total_r = 0;
+		u32 total_g = 0;
+		u32 total_b = 0;
+		
+		std::sort( colors, colors + 9, RGBA8888_CompareAlpha() );
+		
+		
+		#define X432R_ADD_PIXELDATA(bein_index,end_index) \
+			for(u32 i = bein_index; i <= end_index; ++i) \
+			{ \
+				total_r += colors[i].R; \
+				total_g += colors[i].G; \
+				total_b += colors[i].B; \
+			}
+		
+		#define X432R_GET_WEIGHTED_MEAN(original_weight,data_count) \
+			total_r += (color.R * original_weight); \
+			total_g += (color.G * original_weight); \
+			total_b += (color.B * original_weight); \
+			color.R = total_r / (data_count + original_weight); \
+			color.G = total_g / (data_count + original_weight); \
+			color.B = total_b / (data_count + original_weight);
+		
+		#define X432R_GET_MEAN(data_count) \
+			color.R = total_r / data_count; \
+			color.G = total_g / data_count; \
+			color.B = total_b / data_count;
+		
+		
+		switch(SMOOTHING_LEVEL)
+		{
+			case 7:
+			case 8:
+			case 9:
+				switch(color.A >> 6)				// Œ³ƒf[ƒ^‚Ì‹P“x‚É‰ž‚¶‚ÄƒgƒŠƒ€”ÍˆÍ‚ð‰Â•Ï
+				{
+					case 0:							// 0`63
+						X432R_ADD_PIXELDATA(2, 4)
+						break;
+					
+					case 1:							// 64`191
+					case 2:
+						X432R_ADD_PIXELDATA(3, 5)
+						break;
+					
+					case 3:							// 192`255
+						X432R_ADD_PIXELDATA(4, 6)
+						break;
+				}
+				break;
+			
+			case 10:
+			case 11:
+			case 12:
+				switch(color.A / 85)
+				{
+					case 0:							// 0`84
+						X432R_ADD_PIXELDATA(2, 4)
+						break;
+					
+					case 1:							// 85`169
+						X432R_ADD_PIXELDATA(3, 5)
+						break;
+					
+					case 2:							// 170`255
+					case 3:
+						X432R_ADD_PIXELDATA(4, 6)
+						break;
+				}
+				break;
+			
+			case 13:
+			case 14:
+			case 15:
+				switch(color.A / 51)
+				{
+					case 0:							// 0`50
+						X432R_ADD_PIXELDATA(1, 3)
+						break;
+					
+					case 1:							// 51`101
+						X432R_ADD_PIXELDATA(2, 4)
+						break;
+					
+					case 2:							// 102`152
+						X432R_ADD_PIXELDATA(3, 5)
+						break;
+					
+					case 3:							// 153`203
+						X432R_ADD_PIXELDATA(4, 6)
+						break;
+					
+					case 4:							// 204`255
+					case 5:
+						X432R_ADD_PIXELDATA(5, 7)
+						break;
+				}
+				break;
+		}
+		
+		switch(SMOOTHING_LEVEL)
+		{
+			case 7:
+			case 10:
+			case 13:
+				X432R_GET_WEIGHTED_MEAN(6, 3)
+				break;
+			
+			case 8:
+			case 11:
+			case 14:
+				X432R_GET_WEIGHTED_MEAN(3, 3)
+				break;
+			
+			case 9:
+			case 12:
+			case 15:
+				X432R_GET_MEAN(3)
+				break;
+		}
+		
+		
+		#undef X432R_ADD_PIXELDATA
+		#undef X432R_GET_WEIGHTED_MEAN
+		#undef X432R_GET_MEAN
+		
+		
+		color.A = 0xFF;
+		
+		return color;
+	}
+	#endif
+	
+	#ifndef X432R_SMOOTHINGFILTER_TEST
 	template <u32 RENDER_MAGNIFICATION, u32 ROTATION_ANGLE, bool HIGHRESO, bool HUD_VISIBLE>
 	static void DD_UpdateBackSurface(const u32 *source_buffer, const u32 master_brightness, const u32 screen_index)
+	#else
+	template <u32 RENDER_MAGNIFICATION, u32 ROTATION_ANGLE, bool HIGHRESO, u8 SMOOTHING_LEVEL, bool HUD_VISIBLE>
+	static void DD_UpdateBackSurface(u32 *source_buffer, const u32 master_brightness, const u32 screen_index)
+	#endif
 	{
 		const u32 dest_linepitch = ddraw.surfDescBack.lPitch / 4;		// ddraw.surfDescBack.lPitch / ( sizeof(u32) / sizeof(u8) )
 		u32 * const destbuffer_begin = (u32 *)ddraw.surfDescBack.lpSurface;
@@ -2532,19 +2972,61 @@ namespace X432R
 		source_x = source_begin_x;
 		source_y = source_begin_y;
 		
+		
+		#ifdef X432R_SMOOTHINGFILTER_TEST
+		if( IsSmoothingFilterEnabled() )
+		{
+			RGBA8888 *buffer = (RGBA8888 *)source_buffer;
+			
+			for(u32 i = 0; i < 256 * 192 * RENDER_MAGNIFICATION * RENDER_MAGNIFICATION; ++i, ++buffer)
+			{
+				SetColorIntensity(buffer);
+			}
+		}
+		#endif
+		
+		
 		for(dest_y = dest_begin_y; dest_y < dest_end_y; ++dest_y)
 		{
 			dest_buffer = destbuffer_begin + (dest_y * dest_linepitch) + dest_begin_x;
 			
 			for(dest_x = dest_begin_x; dest_x < dest_end_x; ++dest_x, ++dest_buffer)
 			{
+				#ifndef X432R_SMOOTHINGFILTER_TEST
 				if( !HIGHRESO || HUD_VISIBLE )
 					downscaled_index = ( (source_y / RENDER_MAGNIFICATION) * 256 ) + (source_x / RENDER_MAGNIFICATION);
 				
-				if(HIGHRESO)
+/*				if(HIGHRESO)
 					color_rgba8888 = RGBA8888::AlphaBlend( master_brightness, source_buffer[ (source_y * 256 * RENDER_MAGNIFICATION) + source_x ] );
 				else
 					color_rgba8888 = source_buffer[downscaled_index];
+*/				
+				if(HIGHRESO)
+					color_rgba8888 = source_buffer[ (source_y * 256 * RENDER_MAGNIFICATION) + source_x ];
+				else
+					color_rgba8888 = source_buffer[downscaled_index];
+				
+				color_rgba8888.AlphaBlend(master_brightness);
+				#else
+				if( ( !HIGHRESO && (SMOOTHING_LEVEL == 0) ) || HUD_VISIBLE )
+					downscaled_index = ( (source_y / RENDER_MAGNIFICATION) * 256 ) + (source_x / RENDER_MAGNIFICATION);
+				
+				if(SMOOTHING_LEVEL > 0)
+				{
+					if(SMOOTHING_LEVEL <= 6)
+						color_rgba8888 = DD_GetSmoothedPixelData1<RENDER_MAGNIFICATION, SMOOTHING_LEVEL>(source_x, source_y, source_buffer);
+					else
+						color_rgba8888 = DD_GetSmoothedPixelData2<RENDER_MAGNIFICATION, SMOOTHING_LEVEL>(source_x, source_y, source_buffer);
+				}
+				
+				else if(HIGHRESO)
+					color_rgba8888 = source_buffer[ (source_y * 256 * RENDER_MAGNIFICATION) + source_x ];
+				
+				else
+					color_rgba8888 = source_buffer[downscaled_index];
+				
+				color_rgba8888.AlphaBlend(master_brightness);
+				#endif
 				
 				if(HUD_VISIBLE)
 					color_rgba8888.AlphaBlend( hud_buffer[downscaled_index] );
@@ -2584,7 +3066,11 @@ namespace X432R
 		surface->Blt(&rect, NULL, NULL, DDBLT_COLORFILL | DDBLT_WAIT, &effect);
 	}
 	
+	#ifndef X432R_SMOOTHINGFILTER_TEST
 	template <u32 RENDER_MAGNIFICATION>
+	#else
+	template <u32 RENDER_MAGNIFICATION, u8 SMOOTHING_LEVEL>
+	#endif
 	static void DD_DoDisplay()
 	{
 		#ifdef X432R_PROCESSTIME_CHECK
@@ -2656,7 +3142,12 @@ namespace X432R
 				buffer_index = CommonSettings.single_core() ? 0 : clamp(currDisplayBuffer, 0, 2);
 			}
 			
+			#ifndef X432R_SMOOTHINGFILTER_TEST
 			const u32 * const front_buffer = frontBuffer[buffer_index];
+			#else
+			u32 * const front_buffer = frontBuffer[buffer_index];
+			#endif
+			
 			const u32 * const master_brightness = masterBrightness[buffer_index];
 			const bool * const is_highreso_screen = isHighResolutionScreen[buffer_index];
 			
@@ -2664,6 +3155,7 @@ namespace X432R
 			debug_IsHighResoScreen = is_highreso_screen;
 			#endif
 			
+			#ifndef X432R_SMOOTHINGFILTER_TEST
 			#define X432R_CALL_UPDATEBACKSURFACE(rotation_angle,screen_index) \
 			{ \
 				if( is_highreso_screen[screen_index] ) \
@@ -2681,7 +3173,27 @@ namespace X432R
 						DD_UpdateBackSurface<RENDER_MAGNIFICATION, rotation_angle, false, false>(front_buffer, 0, screen_index); \
 				} \
 			}
+			#else
+			#define X432R_CALL_UPDATEBACKSURFACE(rotation_angle,screen_index) \
+			{ \
+					if( is_highreso_screen[screen_index] ) \
+					{ \
+						if(hud_visible) \
+							DD_UpdateBackSurface<RENDER_MAGNIFICATION, rotation_angle, true, SMOOTHING_LEVEL, true>(front_buffer, master_brightness[screen_index], screen_index); \
+						else \
+							DD_UpdateBackSurface<RENDER_MAGNIFICATION, rotation_angle, true, SMOOTHING_LEVEL, false>(front_buffer, master_brightness[screen_index], screen_index); \
+					} \
+					else \
+					{ \
+						if(hud_visible) \
+							DD_UpdateBackSurface<RENDER_MAGNIFICATION, rotation_angle, false, SMOOTHING_LEVEL, true>(front_buffer, 0, screen_index); \
+						else \
+							DD_UpdateBackSurface<RENDER_MAGNIFICATION, rotation_angle, false, SMOOTHING_LEVEL, false>(front_buffer, 0, screen_index); \
+				} \
+			}
+			#endif
 			
+			#if !defined(_MSC_VER) || (_MSC_VER < 1700) || !defined(X432R_PPL_TEST2)
 			for(u32 i = 0; i < 2; ++i)
 			{
 				switch(rotation_angle)
@@ -2692,6 +3204,18 @@ namespace X432R
 					default:	X432R_CALL_UPDATEBACKSURFACE(0, i);		break;
 				}
 			}
+			#else
+			concurrency::parallel_for( 0, 2, [&](const u32 i)
+			{
+				switch(rotation_angle)
+				{
+					case 90:	X432R_CALL_UPDATEBACKSURFACE(90, i);	break;
+					case 180:	X432R_CALL_UPDATEBACKSURFACE(180, i);	break;
+					case 270:	X432R_CALL_UPDATEBACKSURFACE(270, i);	break;
+					default:	X432R_CALL_UPDATEBACKSURFACE(0, i);		break;
+				}
+			});
+			#endif
 			
 			#undef X432R_CALL_UPDATEBACKSURFACE
 			
@@ -2789,7 +3313,6 @@ namespace X432R
 	static void DoDisplay()
 	{
 		X432R_STATIC_RENDER_MAGNIFICATION_CHECK();
-		assert( (lastRenderMagnification >= 1) && (lastRenderMagnification <= 4) );
 		
 		
 		static const u32 RENDER_WIDTH = 256 * RENDER_MAGNIFICATION;
@@ -2822,17 +3345,63 @@ namespace X432R
 		const HWND window_handle = MainWindow->getHWnd();
 		const u32 window_style = GetStyle();
 		
+		
+		#if defined(X432R_SMOOTHINGFILTER_TEST) && defined(X432R_SMOOTHINGFILTER_TEST2)
+		if( (window_style & DWS_OPENGL) || ( (smoothingLevel != 0) && (RENDER_MAGNIFICATION != 2) ) )		// temp
+		{
+			smoothingLevel = 0;
+			WritePrivateProfileInt("X432R", "SmoothingLevel", 0, IniName);
+		}
+		#endif
+		
+		
+		#ifndef X432R_DISPLAYMETHOD_OPENGL_DISABLED
 		if( (window_style & DWS_DDRAW_HW) || (window_style & DWS_DDRAW_SW) )
 		{
 			DeleteScreenTexture();
 			gldisplay.kill();
+		#endif
 			
+			#ifndef X432R_SMOOTHINGFILTER_TEST
 			DD_DoDisplay<RENDER_MAGNIFICATION>();
+			#else
+			switch(smoothingLevel)
+			{
+				case 1:		DD_DoDisplay<RENDER_MAGNIFICATION, 1>();		break;
+				case 2:		DD_DoDisplay<RENDER_MAGNIFICATION, 2>();		break;
+				case 3:		DD_DoDisplay<RENDER_MAGNIFICATION, 3>();		break;
+				case 4:		DD_DoDisplay<RENDER_MAGNIFICATION, 4>();		break;
+				case 5:		DD_DoDisplay<RENDER_MAGNIFICATION, 5>();		break;
+				case 6:		DD_DoDisplay<RENDER_MAGNIFICATION, 6>();		break;
+				case 7:		DD_DoDisplay<RENDER_MAGNIFICATION, 7>();		break;
+				case 8:		DD_DoDisplay<RENDER_MAGNIFICATION, 8>();		break;
+				case 9:		DD_DoDisplay<RENDER_MAGNIFICATION, 9>();		break;
+				case 10:	DD_DoDisplay<RENDER_MAGNIFICATION, 10>();		break;
+				case 11:	DD_DoDisplay<RENDER_MAGNIFICATION, 11>();		break;
+				case 12:	DD_DoDisplay<RENDER_MAGNIFICATION, 12>();		break;
+				case 13:	DD_DoDisplay<RENDER_MAGNIFICATION, 13>();		break;
+				case 14:	DD_DoDisplay<RENDER_MAGNIFICATION, 14>();		break;
+				case 15:	DD_DoDisplay<RENDER_MAGNIFICATION, 15>();		break;
+				
+				default:
+					if(smoothingLevel != 0)
+					{
+						smoothingLevel = 0;
+						WritePrivateProfileInt("X432R", "SmoothingLevel", 0, IniName);
+					}
+					
+					DD_DoDisplay<RENDER_MAGNIFICATION, 0>();
+					break;
+			}
+			#endif
+			
+		#ifndef X432R_DISPLAYMETHOD_OPENGL_DISABLED
 			return;
 		}
 		
 		
 		//------ OGL_DoDisplay() ------
+		assert( (lastRenderMagnification >= 1) && (lastRenderMagnification <= 4) );
 		
 		if( !gldisplay.begin() ) return;
 		
@@ -3159,8 +3728,10 @@ namespace X432R
 		
 		gldisplay.showPage();
 		gldisplay.end();
+		#endif
 	}
 	
+	#ifndef X432R_DISPLAYMETHOD_OPENGL_DISABLED
 //	inline GLuint GetScreenTexture()
 	inline u32 GetScreenTexture()
 	{
@@ -3186,6 +3757,7 @@ namespace X432R
 			hudTexture = 0;
 		}
 	}
+	#endif
 }
 #endif
 
@@ -3214,8 +3786,10 @@ static void DoDisplay(bool firstTime)
 			return;
 		
 		default:
+			#ifndef X432R_DISPLAYMETHOD_OPENGL_DISABLED
 			if(X432R::lastRenderMagnification != 1)
 				X432R::lastRenderMagnification = 1;
+			#endif
 			break;
 	}
 	#endif
@@ -3271,6 +3845,8 @@ static void DoDisplay(bool firstTime)
 	
 	bool hw = (GetStyle()&DWS_DDRAW_HW)!=0;
 	bool sw = (GetStyle()&DWS_DDRAW_SW)!=0;
+	
+	#ifndef X432R_DISPLAYMETHOD_OPENGL_DISABLED
 	if(hw || sw)
 	{
 		gldisplay.kill();
@@ -3281,6 +3857,9 @@ static void DoDisplay(bool firstTime)
 		//other cases..?
 		OGL_DoDisplay();
 	}
+	#else
+	DD_DoDisplay();
+	#endif
 }
 
 void displayProc()
@@ -3311,7 +3890,7 @@ void displayProc()
 void displayThread(void*)
 {
 	for(;;) {
-		#ifndef X432R_CUSTOMRENDERER_ENABLED
+		#if !defined(X432R_CUSTOMRENDERER_ENABLED) || defined(X432R_DISPLAYMETHOD_OPENGL_DISABLED)
 		if(display_die) return;
 		#else
 		if(display_die)
@@ -3343,7 +3922,7 @@ void KillDisplay()
 	SetEvent(display_wakeup_event);
 	g_thread_join(display_thread);
 	
-	#ifdef X432R_CUSTOMRENDERER_ENABLED
+	#if defined(X432R_CUSTOMRENDERER_ENABLED) && !defined(X432R_DISPLAYMETHOD_OPENGL_DISABLED)
 	if( CommonSettings.single_core() )
 	{
 		X432R::DeleteScreenTexture();
@@ -3558,7 +4137,11 @@ static void StepRunLoop_Paused()
 
 static void StepRunLoop_User()
 {
+	#ifndef X432R_MENUITEMMOD_ENABLED
 	const int kFramesPerToolUpdate = 1;
+	#else
+	const int kFramesPerToolUpdate = X432R::cpuPowerSavingEnabled ? 30 : 1;
+	#endif
 
 	Hud.fps = mainLoopData.fps;
 	Hud.fps3d = mainLoopData.fps3d;
@@ -3566,7 +4149,11 @@ static void StepRunLoop_User()
 	Display();
 
 	gfx3d.frameCtrRaw++;
+	#ifndef X432R_MENUITEMMOD_ENABLED
 	if(gfx3d.frameCtrRaw == 60) {
+	#else
+	if(gfx3d.frameCtrRaw >= 60) {
+	#endif
 		mainLoopData.fps3d = gfx3d.frameCtr;
 		gfx3d.frameCtrRaw = 0;
 		gfx3d.frameCtr = 0;
@@ -3574,7 +4161,12 @@ static void StepRunLoop_User()
 
 
 	mainLoopData.toolframecount++;
+	
+	#ifndef X432R_MENUITEMMOD_ENABLED
 	if (mainLoopData.toolframecount == kFramesPerToolUpdate)
+	#else
+	if (mainLoopData.toolframecount >= kFramesPerToolUpdate)
+	#endif
 	{
 		if(SoundView_IsOpened()) SoundView_Refresh();
 		RefreshAllToolWindows();
@@ -4419,6 +5011,7 @@ int _main()
 	else if( GetPrivateProfileBool("X432R", "NoResize", true, IniName) ) style |= DWS_NORESIZE;
 	#endif
 	
+	#ifndef X432R_DISPLAYMETHOD_OPENGL_DISABLED
 	if(GetPrivateProfileBool("Video","Display Method Filter", false, IniName))
 		style |= DWS_FILTER;
 	if(GetPrivateProfileBool("Video","VSync", false, IniName))
@@ -4430,6 +5023,17 @@ int _main()
 		style |= DWS_DDRAW_HW;
 	if(dispMethod == DISPMETHOD_OPENGL)
 		style |= DWS_OPENGL;
+	#else
+	if( GetPrivateProfileBool("Video", "VSync", false, IniName) )
+		style |= DWS_VSYNC;
+	
+	int dispMethod = GetPrivateProfileInt("Video", "Display Method", DISPMETHOD_DDRAW_HW, IniName);
+	
+	if(dispMethod == DISPMETHOD_DDRAW_HW)
+		style |= DWS_DDRAW_HW;
+	else
+		style |= DWS_DDRAW_SW;
+	#endif
 
 	windowSize = GetPrivateProfileInt("Video","Window Size", 0, IniName);
 	video.rotation =  GetPrivateProfileInt("Video","Window Rotate", 0, IniName);
@@ -4800,6 +5404,16 @@ int _main()
 	cur3DCore = GetPrivateProfileInt("X432R", "Renderer", GPU3D_DEFAULT, IniName);
 	
 	X432R::RGBA8888::InitBlendColorTable();
+	
+	#ifdef X432R_LOWQUALITYMODE_TEST
+	X432R::lowQualityMsaaEnabled = GetPrivateProfileInt ("X432R", "LowQualityMsaaEnabled", false, IniName);;
+	X432R::lowQualityAlphaBlendEnabled = GetPrivateProfileInt ("X432R", "LowQualityAlphaBlendEnabled", false, IniName);;
+	#endif
+	
+	#ifdef X432R_SMOOTHINGFILTER_TEST
+	X432R::smoothingLevel = GetPrivateProfileInt("X432R", "SmoothingLevel", 0, IniName);
+	X432R::ignoreHighResolutionArea_OnSmoothing = GetPrivateProfileBool("X432R", "IgnoreHighResolutionArea_OnSmoothing", false, IniName);
+	#endif
 	#endif
 
 	if(cur3DCore == GPU3D_NULL_SAVED)
@@ -4841,10 +5455,6 @@ int _main()
 		CommonSettings.SPU_sync_method = GetPrivateProfileInt("Sound","SynchMethod",0,IniName);	
 	
 	#ifdef X432R_MENUITEMMOD_ENABLED
-	#ifdef X432R_OPENGL_TEXTUREFILTER_ENABLED
-	X432R::openGLTextureFilterEnabled = ( GetPrivateProfileBool("X432R", "OpenGLTextureFilterEnabled", false, IniName) );
-	#endif
-	
 	X432R::ChangeSoundEnabled( GetPrivateProfileBool("X432R", "SoundEnabled", X432R::soundOutputEnabled, IniName) );
 	X432R::cpuPowerSavingEnabled = GetPrivateProfileBool("X432R", "CpuPowerSavingEnabled", X432R::cpuPowerSavingEnabled, IniName);
 //	X432R::showMenubarInFullScreen = GetPrivateProfileBool("X432R", "ShowMenubarInFullScreen", X432R::showMenubarInFullScreen, IniName);
@@ -6126,9 +6736,62 @@ LRESULT CALLBACK WindowProcedure (HWND hwnd, UINT message, WPARAM wParam, LPARAM
 			MainWindow->checkMenu( X432R_MENUITEM_CHANGERESOLUTION_X3,		(render_magnification == 3) );
 			MainWindow->checkMenu( X432R_MENUITEM_CHANGERESOLUTION_X4,		(render_magnification == 4) );
 			
+			#ifdef X432R_DISPLAYMETHOD_OPENGL_DISABLED
+			DesEnableMenuItem(mainMenu, ID_DISPLAYMETHOD_OPENGL,			false);
+			DesEnableMenuItem(mainMenu, ID_DISPLAYMETHOD_FILTER,			false);
+			#endif
+			
+			#ifdef X432R_SMOOTHINGFILTER_TEST
+			const u32 window_style = GetStyle();
+			
+			#ifndef X432R_SMOOTHINGFILTER_TEST2
+			const bool smoothing_is_valid = highreso && ( (window_style & DWS_DDRAW_HW) || (window_style & DWS_DDRAW_SW) );
+			#else
+			const bool smoothing_is_valid = (render_magnification == 2) && ( (window_style & DWS_DDRAW_HW) || (window_style & DWS_DDRAW_SW) );		// temp
+			#endif
+			
+			MainWindow->checkMenu( X432R_MENUITEM_SMOOTHING_DISABLED,		(X432R::smoothingLevel == 0) );
+			MainWindow->checkMenu( X432R_MENUITEM_SMOOTHING_1,				(X432R::smoothingLevel == 1) );
+			MainWindow->checkMenu( X432R_MENUITEM_SMOOTHING_2,				(X432R::smoothingLevel == 2) );
+			MainWindow->checkMenu( X432R_MENUITEM_SMOOTHING_3,				(X432R::smoothingLevel == 3) );
+			MainWindow->checkMenu( X432R_MENUITEM_SMOOTHING_4,				(X432R::smoothingLevel == 4) );
+			MainWindow->checkMenu( X432R_MENUITEM_SMOOTHING_5,				(X432R::smoothingLevel == 5) );
+			MainWindow->checkMenu( X432R_MENUITEM_SMOOTHING_6,				(X432R::smoothingLevel == 6) );
+			MainWindow->checkMenu( X432R_MENUITEM_SMOOTHING_7,				(X432R::smoothingLevel == 7) );
+			MainWindow->checkMenu( X432R_MENUITEM_SMOOTHING_8,				(X432R::smoothingLevel == 8) );
+			MainWindow->checkMenu( X432R_MENUITEM_SMOOTHING_9,				(X432R::smoothingLevel == 9) );
+			MainWindow->checkMenu( X432R_MENUITEM_SMOOTHING_10,				(X432R::smoothingLevel == 10) );
+			MainWindow->checkMenu( X432R_MENUITEM_SMOOTHING_11,				(X432R::smoothingLevel == 11) );
+			MainWindow->checkMenu( X432R_MENUITEM_SMOOTHING_12,				(X432R::smoothingLevel == 12) );
+			MainWindow->checkMenu( X432R_MENUITEM_SMOOTHING_13,				(X432R::smoothingLevel == 13) );
+			MainWindow->checkMenu( X432R_MENUITEM_SMOOTHING_14,				(X432R::smoothingLevel == 14) );
+			MainWindow->checkMenu( X432R_MENUITEM_SMOOTHING_15,				(X432R::smoothingLevel == 15) );
+			MainWindow->checkMenu( X432R_MENUITEM_IGNORE_HIGHRESO_AREA,		X432R::ignoreHighResolutionArea_OnSmoothing );
+			
+			DesEnableMenuItem(mainMenu, X432R_MENUITEM_SMOOTHING_DISABLED,	smoothing_is_valid);
+			DesEnableMenuItem(mainMenu, X432R_MENUITEM_SMOOTHING_1,			smoothing_is_valid);
+			DesEnableMenuItem(mainMenu, X432R_MENUITEM_SMOOTHING_2,			smoothing_is_valid);
+			DesEnableMenuItem(mainMenu, X432R_MENUITEM_SMOOTHING_3,			smoothing_is_valid);
+			DesEnableMenuItem(mainMenu, X432R_MENUITEM_SMOOTHING_4,			smoothing_is_valid);
+			DesEnableMenuItem(mainMenu, X432R_MENUITEM_SMOOTHING_5,			smoothing_is_valid);
+			DesEnableMenuItem(mainMenu, X432R_MENUITEM_SMOOTHING_6,			smoothing_is_valid);
+			DesEnableMenuItem(mainMenu, X432R_MENUITEM_SMOOTHING_7,			smoothing_is_valid);
+			DesEnableMenuItem(mainMenu, X432R_MENUITEM_SMOOTHING_8,			smoothing_is_valid);
+			DesEnableMenuItem(mainMenu, X432R_MENUITEM_SMOOTHING_9,			smoothing_is_valid);
+			DesEnableMenuItem(mainMenu, X432R_MENUITEM_SMOOTHING_10,		smoothing_is_valid);
+			DesEnableMenuItem(mainMenu, X432R_MENUITEM_SMOOTHING_11,		smoothing_is_valid);
+			DesEnableMenuItem(mainMenu, X432R_MENUITEM_SMOOTHING_12,		smoothing_is_valid);
+			DesEnableMenuItem(mainMenu, X432R_MENUITEM_SMOOTHING_13,		smoothing_is_valid);
+			DesEnableMenuItem(mainMenu, X432R_MENUITEM_SMOOTHING_14,		smoothing_is_valid);
+			DesEnableMenuItem(mainMenu, X432R_MENUITEM_SMOOTHING_15,		smoothing_is_valid);
+			DesEnableMenuItem(mainMenu, X432R_MENUITEM_IGNORE_HIGHRESO_AREA,	smoothing_is_valid);
+			#endif
+			
 			#ifdef X432R_CUSTOMRENDERER_DEBUG
 			MainWindow->checkMenu(X432R_MENUITEM_ENABLEDEBUGMODE,			X432R::debugModeEnabled);
+			MainWindow->checkMenu(X432R_MENUITEM_ENABLEDEBUGMODE2,			X432R::debugModeEnabled2);
 			DesEnableMenuItem(mainMenu, X432R_MENUITEM_ENABLEDEBUGMODE,		highreso);
+			DesEnableMenuItem(mainMenu, X432R_MENUITEM_ENABLEDEBUGMODE2,	highreso);
 			#endif
 			#endif
 
@@ -6185,11 +6848,6 @@ LRESULT CALLBACK WindowProcedure (HWND hwnd, UINT message, WPARAM wParam, LPARAM
 			#endif
 			
 			#ifdef X432R_MENUITEMMOD_ENABLED
-			#ifdef X432R_OPENGL_TEXTUREFILTER_ENABLED
-			MainWindow->checkMenu( X432R_MENUITEM_OPENGL_TEXTUREFILTER, X432R::openGLTextureFilterEnabled );
-			DesEnableMenuItem( mainMenu, X432R_MENUITEM_OPENGL_TEXTUREFILTER, !softrast_selected );
-			#endif
-			
 			MainWindow->checkMenu(X432R_MENUITEM_NORESIZE, GetStyle() & DWS_NORESIZE);
 //			MainWindow->checkMenu(X432R_MENUITEM_SHOWMENUBAR_IN_FULLSCREEN, X432R::showMenubarInFullScreen);
 			
@@ -6267,7 +6925,7 @@ LRESULT CALLBACK WindowProcedure (HWND hwnd, UINT message, WPARAM wParam, LPARAM
 				WritePrivateProfileBool("X432R","WindowMaximized", window_maximized, IniName);
 				
 				if(window_maximized || fullscreen_mode)
-					ShowWindow(hwnd, SW_NORMAL);		// 最大化状態を解除してSaveWindowSize()を実行できるようにする（フルスクリーンモードだとうまく動作しない？）
+					ShowWindow(hwnd, SW_NORMAL);		// 最大化状態を解除してSaveWindowSize()を実行できるようにする（フルスクリーンモードだとうまく動作しない？）
 				#endif
 				
 				//Save window size
@@ -6480,7 +7138,6 @@ LRESULT CALLBACK WindowProcedure (HWND hwnd, UINT message, WPARAM wParam, LPARAM
 
 	case WM_KEYDOWN:
 		//MainWindowToolbar->Show(false);
-		
 		#ifndef X432R_TOUCHINPUT_ENABLED
 		input_acquire();
 		#endif
@@ -6519,7 +7176,7 @@ DOKEYDOWN:
 				ToggleFullscreen();
 				ForceRatio = oldForceRatio;
 				#else
-				ToggleFullscreen();		// 上記のコメントによると、この変更により不具合が出る可能性がある？
+				ToggleFullscreen();		// 上記のコメントによると、この変更により不具合が出る可能性がある？
 				#endif
 			}
 			else
@@ -6736,7 +7393,6 @@ DOKEYDOWN:
 	case WM_MOUSEMOVE:
 	case WM_LBUTTONDOWN:
 	case WM_LBUTTONDBLCLK:
-		
 		#ifdef X432R_TOUCHINPUT_ENABLED
 		if( X432R::IsMouseEventFromTouch() ) return 0;			// タッチ入力で発生したイベントを無視
 		#endif
@@ -6785,7 +7441,6 @@ DOKEYDOWN:
 		return 0;
 
 	case WM_LBUTTONUP:
-
 		#ifdef X432R_TOUCHINPUT_ENABLED
 		if( X432R::IsMouseEventFromTouch() ) return 0;			// タッチ入力で発生したイベントを無視
 		#endif
@@ -6800,7 +7455,11 @@ DOKEYDOWN:
 	#ifdef X432R_TOUCHINPUT_ENABLED
 	case WM_TOUCH:
 	{
-		UINT touch_count = LOWORD(wParam);
+		if( (video.layout == 2) && ( (video.swap == 0) || (video.swap == 2 && !MainScreen.offset) || (video.swap == 3 && MainScreen.offset) ) ) return 0;
+		
+		#if 1
+		const UINT touch_count = LOWORD(wParam);
+		
 		if(touch_count != 1) return 0;
 		
 //		TOUCHINPUT touch_inputs[16];
@@ -6809,13 +7468,14 @@ DOKEYDOWN:
 //		if( X432R::GetTouchInputInfo( (HTOUCHINPUT)lParam, 16, touch_inputs, sizeof(TOUCHINPUT) ) )
 		if( X432R::GetTouchInputInfo( (HTOUCHINPUT)lParam, 1, &touch_input, sizeof(TOUCHINPUT) ) )
 		{
-//			TOUHCHINPUT touch_input = touch_inputs[0];
+//			TOUCHINPUT touch_input = touch_inputs[0];
 			POINT touch_location;
-			HWND main_window_handle = MainWindow->getHWnd();
+			HWND window_handle = MainWindow->getHWnd();
 			
 			touch_location.x = TOUCH_COORD_TO_PIXEL(touch_input.x);
 			touch_location.y = TOUCH_COORD_TO_PIXEL(touch_input.y);
-			ScreenToClient(main_window_handle, &touch_location);
+			
+			ScreenToClient(window_handle, &touch_location);
 			
 			s32 touch_x = touch_location.x;
 			s32 touch_y = touch_location.y;
@@ -6824,9 +7484,6 @@ DOKEYDOWN:
 			
 			if( (touch_input.dwFlags & TOUCHEVENTF_DOWN) || (touch_input.dwFlags & TOUCHEVENTF_MOVE) )
 			{
-				if( (video.layout == 2) && ( (video.swap == 0) || (video.swap == 2 && !MainScreen.offset) || (video.swap == 3 && MainScreen.offset) ) )
-					return 0;
-				
 				ToDSScreenRelativeCoords(touch_x, touch_y, 1);
 				
 				if(userTouchesScreen)
@@ -6834,7 +7491,7 @@ DOKEYDOWN:
 					touch_x = clamp(touch_x, 0, 255);
 					touch_y = clamp(touch_y, 0, 191);
 				}
-				else if( (touch_x < 0) || (touch_x > 255) || (touch_y < 0) || (touch_y > 191) ) return 0;	// 下画面の範囲外で発生したTOUCHEVENTF_DOWNを無視
+				else if( (touch_x < 0) || (touch_x > 255) || (touch_y < 0) || (touch_y > 191) ) return 0;		// 下画面の範囲外で発生したTOUCHEVENTF_DOWNを無視
 				
 				NDS_setTouchPos(touch_x, touch_y);
 				winLastTouch.x = touch_x;
@@ -6844,16 +7501,99 @@ DOKEYDOWN:
 			
 			if(touch_input.dwFlags & TOUCHEVENTF_UP)
 			{
-			//	if( !StylusAutoHoldPressed )
-			//		NDS_releaseTouch();
+//				if( !StylusAutoHoldPressed )
+//					NDS_releaseTouch();
 				
-			//	userTouchesScreen = false;
+//				userTouchesScreen = false;
 				
 				X432R::SetDelayedTouchUp();
 			}
 			
 			X432R::CloseTouchInputHandle( (HTOUCHINPUT)lParam );
 		}
+		#else
+		const UINT touch_count = LOWORD(wParam);
+		
+		if( (touch_count < 1) || (touch_count >= 16) ) return 0;
+		
+		static float valid_input_id = -1.0f;
+		TOUCHINPUT touch_inputs[16];
+		
+		if( X432R::GetTouchInputInfo( (HTOUCHINPUT)lParam, 16, touch_inputs, sizeof(TOUCHINPUT) ) )
+		{
+			HWND window_handle = MainWindow->getHWnd();
+			TOUCHINPUT *touch_input;
+			float id;
+			DWORD flags;
+			POINT touch_location;
+			s32 touch_x, touch_y;
+			
+			for(u32 i = 0; i < touch_count; ++i)
+			{
+				touch_input = touch_inputs + i;
+				
+				id = (float)touch_input->dwID;
+				flags = touch_input->dwFlags;
+				
+				touch_location.x = TOUCH_COORD_TO_PIXEL(touch_input->x);
+				touch_location.y = TOUCH_COORD_TO_PIXEL(touch_input->y);
+				
+				ScreenToClient(window_handle, &touch_location);
+				
+				touch_x = touch_location.x;
+				touch_y = touch_location.y;
+				
+				UnscaleScreenCoords(touch_x, touch_y);
+				ToDSScreenRelativeCoords(touch_x, touch_y, 1);
+				
+				if(flags & TOUCHEVENTF_DOWN)
+				{
+					if( (valid_input_id >= 0.0f) || (touch_x < 0) || (touch_x > 255) || (touch_y < 0) || (touch_y > 191) ) continue;
+					
+					valid_input_id = id;
+					
+					NDS_setTouchPos(touch_x, touch_y);
+					winLastTouch.x = touch_x;
+					winLastTouch.y = touch_y;
+					userTouchesScreen = true;
+					break;
+				}
+				
+				if(id != valid_input_id) continue;
+				
+				if(flags & TOUCHEVENTF_MOVE)
+				{
+//					if(userTouchesScreen)
+//					{
+						touch_x = clamp(touch_x, 0, 255);
+						touch_y = clamp(touch_y, 0, 191);
+//					}
+//					else if( (touch_x < 0) || (touch_x > 255) || (touch_y < 0) || (touch_y > 191) ) return 0;		// ‰º‰æ–Ê‚Ì”ÍˆÍŠO‚Å”­¶‚µ‚½TOUCHEVENTF_DOWN‚ð–³Ž‹
+					
+					NDS_setTouchPos(touch_x, touch_y);
+					winLastTouch.x = touch_x;
+					winLastTouch.y = touch_y;
+					userTouchesScreen = true;
+					break;
+				}
+				
+				if(flags & TOUCHEVENTF_UP)
+				{
+//					if( !StylusAutoHoldPressed )
+//						NDS_releaseTouch();
+					
+//					userTouchesScreen = false;
+					
+					X432R::SetDelayedTouchUp();
+					
+					valid_input_id = -1.0f;
+					break;
+				}
+			}
+			
+			X432R::CloseTouchInputHandle( (HTOUCHINPUT)lParam );
+		}
+		#endif
 		
 		return 0;
 	}
@@ -7450,7 +8190,7 @@ DOKEYDOWN:
 			if (video.layout == 1) return 0;
 			
 			#ifdef X432R_CUSTOMRENDERER_ENABLED
-			SetRotate(hwnd, 0);		// 高解像度レンダラ使用時、rotateが0以外の時にHorizontalを選択すると描画位置がおかしくなる？
+			SetRotate(hwnd, 0);		// 高解像度レンダラ使用時、rotateが0以外の時にHorizontalを選択すると描画位置がおかしくなる？
 			#endif
 			
 			video.layout = 1;
@@ -7578,9 +8318,40 @@ DOKEYDOWN:
 			X432R::ChangeRenderMagnification(4);
 			break;
 		
+		#ifdef X432R_SMOOTHINGFILTER_TEST
+		case X432R_MENUITEM_SMOOTHING_DISABLED:
+		case X432R_MENUITEM_SMOOTHING_1:
+		case X432R_MENUITEM_SMOOTHING_2:
+		case X432R_MENUITEM_SMOOTHING_3:
+		case X432R_MENUITEM_SMOOTHING_4:
+		case X432R_MENUITEM_SMOOTHING_5:
+		case X432R_MENUITEM_SMOOTHING_6:
+		case X432R_MENUITEM_SMOOTHING_7:
+		case X432R_MENUITEM_SMOOTHING_8:
+		case X432R_MENUITEM_SMOOTHING_9:
+		case X432R_MENUITEM_SMOOTHING_10:
+		case X432R_MENUITEM_SMOOTHING_11:
+		case X432R_MENUITEM_SMOOTHING_12:
+		case X432R_MENUITEM_SMOOTHING_13:
+		case X432R_MENUITEM_SMOOTHING_14:
+		case X432R_MENUITEM_SMOOTHING_15:
+			X432R::smoothingLevel = LOWORD(wParam) - X432R_MENUITEM_SMOOTHING_DISABLED;
+			WritePrivateProfileInt("X432R", "SmoothingLevel", (int)X432R::smoothingLevel, IniName);
+			break;
+		
+		case X432R_MENUITEM_IGNORE_HIGHRESO_AREA:
+			X432R::ignoreHighResolutionArea_OnSmoothing = !X432R::ignoreHighResolutionArea_OnSmoothing;
+			WritePrivateProfileBool("X432R", "IgnoreHighResolutionArea_OnSmoothing", X432R::ignoreHighResolutionArea_OnSmoothing, IniName);
+			break;
+		#endif
+		
 		#ifdef X432R_CUSTOMRENDERER_DEBUG
 		case X432R_MENUITEM_ENABLEDEBUGMODE:
 			X432R::debugModeEnabled = !X432R::debugModeEnabled;
+			break;
+		
+		case X432R_MENUITEM_ENABLEDEBUGMODE2:
+			X432R::debugModeEnabled2 = !X432R::debugModeEnabled2;
 			break;
 		#endif
 		#endif
@@ -7608,6 +8379,7 @@ DOKEYDOWN:
 			}
 			break;
 
+		#ifndef X432R_DISPLAYMETHOD_OPENGL_DISABLED
 		case ID_DISPLAYMETHOD_OPENGL:
 			{
 				Lock lock (win_backbuffer_sync);
@@ -7624,6 +8396,7 @@ DOKEYDOWN:
 				WritePrivateProfileInt("Video","Display Method Filter", (GetStyle()&DWS_FILTER)?1:0, IniName);
 			}
 			break;
+		#endif
 
 		case IDM_RESET:
 			ResetGame();
@@ -7882,19 +8655,19 @@ DOKEYDOWN:
 					WritePrivateProfileBool("X432R", "NoResize", ( GetStyle() & DWS_NORESIZE ) != 0, IniName);
 				}
 				#endif
-				
+
 				SetStyle(GetStyle()^DWS_LOCKDOWN);
 
 				MainWindow->setClientSize(rc.right-rc.left, rc.bottom-rc.top);
 
 				WritePrivateProfileBool("Video", "Window Lockdown", (GetStyle()&DWS_LOCKDOWN)!=0, IniName);
-				
+
 				#ifdef X432R_MENUITEMMOD_ENABLED2
 				UpdateWndRects(hwnd);
 				#endif
 			}
 			return 0;
-		
+
 		#ifdef X432R_MENUITEMMOD_ENABLED
 		case X432R_MENUITEM_NORESIZE:
 			{
@@ -7932,13 +8705,6 @@ DOKEYDOWN:
 				HK_ToggleRasterizer(0, false);
 			}
 			break;
-		
-		#ifdef X432R_OPENGL_TEXTUREFILTER_ENABLED
-		case X432R_MENUITEM_OPENGL_TEXTUREFILTER:
-			X432R::openGLTextureFilterEnabled = !X432R::openGLTextureFilterEnabled;
-			WritePrivateProfileBool("X432R", "OpenGLTextureFilterEnabled", X432R::openGLTextureFilterEnabled, IniName);
-			break;
-		#endif
 		
 		case X432R_MENUITEM_SOUNDOUTPUT:
 			X432R::HK_ToggleSoundEnabledKeyDown(0, false);
@@ -8098,13 +8864,6 @@ DOKEYDOWN:
 
 void Change3DCoreWithFallbackAndSave(int newCore)
 {
-/*	#if defined(X432R_CUSTOMRENDERER_ENABLED) || defined(X432R_TOUCHINPUT_ENABLED) || defined(X432R_MENUITEMMOD_ENABLED) || defined(X432R_FILEPATHMOD_ENABLED)
-	const u32 max_index = ( sizeof(core3DList) / sizeof( core3DList[0] ) ) - 1;
-	
-	if( (newCore >= max_index) || ( core3DList[newCore] == NULL ) )
-		newCore = GPU3D_SWRAST;
-	#endif
-*/	
 	#ifndef X432R_CUSTOMRENDERER_ENABLED
 	if( (newCore < 0) || (newCore > GPU3D_OPENGL_OLD) )
 		newCore = GPU3D_SWRAST;
@@ -8249,6 +9008,11 @@ LRESULT CALLBACK GFX3DSettingsDlgProc(HWND hw, UINT msg, WPARAM wp, LPARAM lp)
 				ComboBox_AddString(GetDlgItem(hw, IDC_3DCORE), core3DList[i]->name);
 			}
 			ComboBox_SetCurSel(GetDlgItem(hw, IDC_3DCORE), cur3DCore);
+
+			#ifdef X432R_LOWQUALITYMODE_TEST
+			CheckDlgButton(hw, X432R_CHECKBOX_LOWQUALITY_MSAA, X432R::lowQualityMsaaEnabled);
+			CheckDlgButton(hw, X432R_CHECKBOX_LOWQUALITY_ALPHABLEND, X432R::lowQualityAlphaBlendEnabled);
+			#endif
 		}
 		return TRUE;
 
@@ -8266,6 +9030,13 @@ LRESULT CALLBACK GFX3DSettingsDlgProc(HWND hw, UINT msg, WPARAM wp, LPARAM lp)
 					CommonSettings.GFX3D_Renderer_Multisample = IsDlgCheckboxChecked(hw,IDC_3DSETTINGS_ANTIALIASING);
 					CommonSettings.GFX3D_Zelda_Shadow_Depth_Hack  = GetDlgItemInt(hw,IDC_ZELDA_SHADOW_DEPTH_HACK,NULL,FALSE);
 					CommonSettings.GFX3D_TXTHack = IsDlgCheckboxChecked(hw,IDC_TXTHACK);
+
+					#ifdef X432R_LOWQUALITYMODE_TEST
+					X432R::lowQualityMsaaEnabled = IsDlgCheckboxChecked(hw, X432R_CHECKBOX_LOWQUALITY_MSAA) && CommonSettings.GFX3D_Renderer_Multisample;
+					X432R::lowQualityAlphaBlendEnabled = IsDlgCheckboxChecked(hw, X432R_CHECKBOX_LOWQUALITY_ALPHABLEND);
+					WritePrivateProfileBool("X432R", "LowQualityMsaaEnabled", X432R::lowQualityMsaaEnabled, IniName);
+					WritePrivateProfileBool("X432R", "LowQualityAlphaBlendEnabled", X432R::lowQualityAlphaBlendEnabled, IniName);
+					#endif
 
 					Change3DCoreWithFallbackAndSave(ComboBox_GetCurSel(GetDlgItem(hw, IDC_3DCORE)));
 					WritePrivateProfileBool("3D", "HighResolutionInterpolateColor", CommonSettings.GFX3D_HighResolutionInterpolateColor, IniName);

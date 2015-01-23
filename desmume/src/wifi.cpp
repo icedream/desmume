@@ -1809,7 +1809,7 @@ bool Adhoc_Init()
 	saddr.sa_family = AF_INET;
 	*(u32*)&saddr.sa_data[2] = htonl(INADDR_ANY); 
 	*(u16*)&saddr.sa_data[0] = htons(BASEPORT);
-	res = ::bind((SOCKET)wifi_socket, &saddr, (int)sizeof(sockaddr_t));
+	res = bind(wifi_socket, &saddr, sizeof(sockaddr_t));
 	if (res < 0)
 	{
 		WIFI_LOG(1, "Ad-hoc: failed to bind the socket.\n");

@@ -1247,6 +1247,12 @@ void Sequencer::init()
 //	return NULL;
 //}
 
+#if defined(_MSC_VER) && (_MSC_VER >= 1700)
+#ifdef X432R_PPL_TEST
+#include <ppl.h>
+#endif
+#endif
+
 static void execHardware_hblank()
 {
 	//this logic keeps moving around.
@@ -1257,8 +1263,27 @@ static void execHardware_hblank()
 	if(nds.VCount<192)
 	{
 		//taskSubGpu.execute(renderSubScreen,NULL);
+		#ifndef X432R_CUSTOMRENDERER_ENABLED
 		GPU_RenderLine(&MainScreen, nds.VCount, frameSkipper.ShouldSkip2D());
 		GPU_RenderLine(&SubScreen, nds.VCount, frameSkipper.ShouldSkip2D());
+		#else
+		X432R::backBuffer.UpdateRenderLineParams( nds.VCount, frameSkipper.ShouldSkip2D() );
+		
+		#ifdef X432R_PROCESSTIME_CHECK
+		X432R::AutoStopTimeCounter timecounter(X432R::timeCounter_2D);
+		#endif
+		
+		#if !defined(_MSC_VER) || (_MSC_VER < 1700) || !defined(X432R_PPL_TEST2)
+		GPU_RenderLine( &MainScreen, nds.VCount, frameSkipper.ShouldSkip2D() );
+		GPU_RenderLine( &SubScreen, nds.VCount, frameSkipper.ShouldSkip2D() );
+		#else
+		concurrency::parallel_invoke
+		(
+			[&]{	GPU_RenderLine( &MainScreen, nds.VCount, frameSkipper.ShouldSkip2D() );			},
+			[&]{	GPU_RenderLine( &SubScreen, nds.VCount, frameSkipper.ShouldSkip2D() );			}
+		);
+		#endif
+		#endif
 		//taskSubGpu.finish();
 
 		//trigger hblank dmas

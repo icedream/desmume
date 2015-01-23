@@ -23,15 +23,18 @@
 #define X432R_BUILDSWITCH_H_INCLUDED
 
 #include <cmath>
-#include <algorithm>
-#include <functional>
+#include <string>
+//#include <algorithm>
+//#include <functional>
+//#include <utility>
+#include <assert.h>
 #include "../types.h"
 
 
 template <typename TYPE>
 inline TYPE clamp(const TYPE value, const TYPE min, const TYPE max)
 {
-	assert(min < max);
+	assert(min <= max);
 	
 	if(value < min) return min;
 	if(value > max) return max;
@@ -40,52 +43,70 @@ inline TYPE clamp(const TYPE value, const TYPE min, const TYPE max)
 }
 
 
-// Enable the high resolution 3D rendering
+// 高解像度3Dレンダリングを有効化
 #define X432R_CUSTOMRENDERER_ENABLED
 
-// Enable the change of touch input relationship
+// タッチ入力関係の変更を有効化
 #define X432R_TOUCHINPUT_ENABLED
 
-// Enable the change of menu relationship
+// メニュー関係の変更を有効化
 #define X432R_MENUITEMMOD_ENABLED
 #define X432R_MENUITEMMOD_ENABLED2
 
-// Enable the change of file path relationship
+// ファイルパス関係の変更を有効化
 #define X432R_FILEPATHMOD_ENABLED
 
 
 namespace X432R
 {
-	//--- High resolution 3D rendering ---
+	//--- 高解像度3Dレンダリング ---
 	#ifdef X432R_CUSTOMRENDERER_ENABLED
-		// debug
-//		#define X432R_SINGLECORE_TEST
-//		#define X432R_PROCESSTIME_CHECK
-//		#define X432R_CUSTOMRENDERER_DEBUG
-//		#define X432R_CUSTOMRENDERER_DEBUG2
-//		#define X432R_HIGHRESOLUTION_RENDERLINE_DEBUG
-		
 		// 3D Renderer
 		#define X432R_CUSTOMSOFTRASTENGINE_ENABLED			// ok
 		#define X432R_CUSTOMRENDERER_CLEARIMAGE_ENABLED		// not tested
-		#define X432R_OPENGL_FOG_ENABLED					// ok
 		
 		// GPU
 //		#define X432R_DISPCAPTURE_MAINMEMORYFIFO_TEST		// not tested
 		
 		
-		// experimental
+		//--- experimental ---
 		#define X432R_SAMPLEDVRAMDATACHECK_TEST				// temp
 		#define X432R_LAYERPOSITIONOFFSET_TEST
+		
+		#define X432R_OPENGL_FOG_ENABLED
+		#define X432R_OPENGL_CUSTOMSTENCILTEST
+		
+		#define X432R_LOWQUALITYMODE_TEST
+		#define X432R_DISPLAYMETHOD_OPENGL_DISABLED
+		
+		#define X432R_PPL_TEST
+		
+		#if 0
+//		#define X432R_SMOOTHINGFILTER_TEST
+//		#define X432R_SMOOTHINGFILTER_TEST2
+		
+//		#define X432R_PPL_TEST2
+//		#define X432R_CPP_AMP_TEST
+		
+		
+		//--- debug ---
+//		#define X432R_SINGLECORE_TEST
+		#define X432R_PROCESSTIME_CHECK
+		#define X432R_CUSTOMRENDERER_DEBUG
+//		#define X432R_CUSTOMRENDERER_DEBUG2
+//		#define X432R_HIGHRESOLUTION_RENDERLINE_DEBUG
+		
+		
+		//--- incomplete ---
 //		#define X432R_LAYERPOSITIONOFFSET_TEST2
 //		#define X432R_HIGHRESO_BG_OBJ_ROTSCALE_TEST
 		
-//		#define X432R_3D_REARPLANE_TEST
+//		#define X432R_OPENGL_CUSTOMSTENCILTEST2
+//		#define X432R_OPENGL_2PASSSHADOW_TEST
+		
 //		#define X432R_HIGHRESO_TEXTURE_TEST
-		
-//		#define X432R_BACKGROUNDBUFFER_DISABLED
-//		#define X432R_FOREGROUNDBUFFER_TEST
-		
+//		#define X432R_3D_REARPLANE_TEST
+		#endif
 		
 		
 		#define X432R_STATIC_RENDER_MAGNIFICATION_CHECK() \
@@ -97,6 +118,18 @@ namespace X432R
 		u32 GetCurrentRenderMagnification();
 		void ClearBuffers();
 		
+		#ifdef X432R_LOWQUALITYMODE_TEST
+		extern bool lowQualityMsaaEnabled;
+		extern bool lowQualityAlphaBlendEnabled;
+		#endif
+		
+		#ifdef X432R_SMOOTHINGFILTER_TEST
+		bool IsSmoothingFilterEnabled();
+		#endif
+		
+		#ifdef X432R_HIGHRESO_TEXTURE_TEST
+		bool CheckTextureData(const u16 * const texture_buffer);
+		#endif
 		
 		#ifdef X432R_PROCESSTIME_CHECK
 		class ProcessTimeCounter
@@ -112,7 +145,7 @@ namespace X432R
 			
 			void Start();
 			void Stop();
-			void Reset();
+			void Reset(const u32 fps);
 		};
 		
 		class AutoStopTimeCounter
@@ -129,30 +162,27 @@ namespace X432R
 		};
 		
 		extern ProcessTimeCounter timeCounter_3D;
+		extern ProcessTimeCounter timeCounter_3DFinish1;
+		extern ProcessTimeCounter timeCounter_3DFinish2;
 		extern ProcessTimeCounter timeCounter_2D;
-		extern ProcessTimeCounter timeCounter_3DFinish;
 		extern ProcessTimeCounter timeCounter_2DHighReso;
 		#endif
 		
 		#ifdef X432R_CUSTOMRENDERER_DEBUG
 		extern bool debugModeEnabled;
+		extern bool debugModeEnabled2;
 		
 		void ShowDebugMessage(std::string message);
 		#endif
 	#endif
 	
 	
-	//--- Menu ---
+	//--- メニュー ---
 	#ifdef X432R_MENUITEMMOD_ENABLED
-//		#define X432R_OPENGL_TEXTUREFILTER_ENABLED
-		
-		#ifdef X432R_OPENGL_TEXTUREFILTER_ENABLED
-		extern bool openGLTextureFilterEnabled;
-		#endif
-		
 		extern bool cpuPowerSavingEnabled;
 		
 		void HK_ToggleSoundEnabledKeyDown(int, bool justPressed);
+		void HK_ToggleDecreaseSpeedKeyDown(int target_fps, bool just_pressed);
 	#endif
 	
 	#ifdef X432R_MENUITEMMOD_ENABLED2

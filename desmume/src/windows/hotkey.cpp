@@ -746,6 +746,22 @@ void InitCustomKeys (SCustomKeys *keys)
 	keys->ToggleSoundEnabled.name = L"Toggle Sound Enabled";
 	keys->ToggleSoundEnabled.page = HOTKEY_PAGE_TOOLS;
 	keys->ToggleSoundEnabled.key = NULL;
+	
+	keys->ToggleDecreaseSpeed30.handleKeyDown = X432R::HK_ToggleDecreaseSpeedKeyDown;
+	keys->ToggleDecreaseSpeed30.param = 30;
+	keys->ToggleDecreaseSpeed30.code = "X432R:ToggleDecreaseSpeed30";
+//	keys->ToggleDecreaseSpeed30.name = L"Toggle Decrease Speed 1/2";
+	keys->ToggleDecreaseSpeed30.name = L"Toggle 1/2 Speed";
+	keys->ToggleDecreaseSpeed30.page = HOTKEY_PAGE_TOOLS;
+	keys->ToggleDecreaseSpeed30.key = NULL;
+	
+	keys->ToggleDecreaseSpeed15.handleKeyDown = X432R::HK_ToggleDecreaseSpeedKeyDown;
+	keys->ToggleDecreaseSpeed15.param = 15;
+	keys->ToggleDecreaseSpeed15.code = "X432R:ToggleDecreaseSpeed15";
+//	keys->ToggleDecreaseSpeed15.name = L"Toggle Decrease Speed 1/4";
+	keys->ToggleDecreaseSpeed15.name = L"Toggle 1/4 Speed";
+	keys->ToggleDecreaseSpeed15.page = HOTKEY_PAGE_TOOLS;
+	keys->ToggleDecreaseSpeed15.key = NULL;
 	#endif
 
 	keys->ToggleReadOnly.handleKeyDown = HK_ToggleReadOnly;

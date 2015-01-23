@@ -128,8 +128,8 @@ static FORCEINLINE int fastFloor(float f)
 static Fragment _screen[GFX3D_FRAMEBUFFER_WIDTH*GFX3D_FRAMEBUFFER_HEIGHT];
 static FragmentColor _screenColor[GFX3D_FRAMEBUFFER_WIDTH*GFX3D_FRAMEBUFFER_HEIGHT];
 #else
-static Fragment _screen[GFX3D_FRAMEBUFFER_WIDTH*4 * GFX3D_FRAMEBUFFER_HEIGHT*4];
-static FragmentColor _screenColor[GFX3D_FRAMEBUFFER_WIDTH*4 * GFX3D_FRAMEBUFFER_HEIGHT*4];
+static Fragment _screen[1024 * 768];
+static FragmentColor _screenColor[1024 * 768];
 #endif
 
 static FORCEINLINE int iround(float f) {
@@ -839,7 +839,6 @@ public:
 			width -= -x;
 			x = 0;
 		}
-		
 		#ifndef X432R_CUSTOMRENDERER_ENABLED
 		if(x+width > (RENDERER?GFX3D_FRAMEBUFFER_WIDTH:engine->width))
 		{
@@ -891,11 +890,10 @@ public:
 
 		//HACK: special handling for horizontal line poly
 		#ifndef X432R_CUSTOMRENDERER_ENABLED
-		if (lineHack && left->Height == 0 && right->Height == 0 && left->Y < GFX3D_FRAMEBUFFER_HEIGHT && left->Y >= 0)
+		if (lineHack && left->Height == 0 && right->Height == 0 && left->Y<GFX3D_FRAMEBUFFER_HEIGHT && left->Y>=0)
 		#else
-		if (lineHack && left->Height == 0 && right->Height == 0 && left->Y < engine->height && left->Y >= 0)
+		if( lineHack && (left->Height == 0) && (right->Height == 0) && (left->Y < engine->height) && (left->Y >= 0) )
 		#endif
-
 		{
 			bool draw = (!SLI || (left->Y & SLI_MASK) == SLI_VALUE);
 			if(draw) drawscanline(left,right,lineHack);
@@ -1448,7 +1446,6 @@ void SoftRasterizerEngine::framebufferProcess()
 			for(int x = 0; x < this->width; x++, i++)
 		#endif
 			{
-		
 				Fragment destFragment = screen[i];
 				u8 self = destFragment.polyid.opaque;
 				if(edgeMarkDisabled[self>>3]) continue;
@@ -1505,23 +1502,12 @@ void SoftRasterizerEngine::framebufferProcess()
 		}
 	}
 
+	#ifndef X432R_CUSTOMRENDERER_ENABLED
 	if(gfx3d.renderState.enableFog)
+	#else
+	if( gfx3d.renderState.enableFog && !X432R::IsHighResolutionRendererSelected() )
+	#endif
 	{
-		#ifdef X432R_CUSTOMSOFTRASTENGINE_ENABLED
-		const u8 * const fog_density_pointer = MMU.MMU_MEM[ARMCPU_ARM9][0x40] + 0x360;
-		
-		if( ( fog_density_pointer[0] == 0 ) && ( fog_density_pointer[31] == 0 ) ) return;
-		
-		const u32 render_magnification = X432R::GetCurrentRenderMagnification();
-		
-		switch(render_magnification)
-		{
-			case 2: gfx3d.renderState.enableFogAlphaOnly ? DrawFog_forHighResolution<2, true>() : DrawFog_forHighResolution<2, false>(); return;
-			case 3: gfx3d.renderState.enableFogAlphaOnly ? DrawFog_forHighResolution<3, true>() : DrawFog_forHighResolution<3, false>(); return;
-			case 4: gfx3d.renderState.enableFogAlphaOnly ? DrawFog_forHighResolution<4, true>() : DrawFog_forHighResolution<4, false>(); return;
-		}
-		#endif
-		
 		u32 r = GFX3D_5TO6((gfx3d.renderState.fogColor)&0x1F);
 		u32 g = GFX3D_5TO6((gfx3d.renderState.fogColor>>5)&0x1F);
 		u32 b = GFX3D_5TO6((gfx3d.renderState.fogColor>>10)&0x1F);
@@ -1805,6 +1791,13 @@ GPU3DInterface gpu3DRasterize = {
 
 
 #ifdef X432R_CUSTOMRENDERER_ENABLED
+#include "GPU.h"
+
+#if defined(_MSC_VER) && (_MSC_VER >= 1700)
+#ifdef X432R_PPL_TEST
+#include <ppl.h>
+#endif
+#endif
 
 #ifdef X432R_CUSTOMSOFTRASTENGINE_ENABLED
 /*
@@ -2025,6 +2018,7 @@ void SoftRasterizerEngine::InitFramebuffer(const u32 width, const u32 height, co
 				
 				//this is tested quite well in the sonic chronicles main map mode
 				//where depth values are used for trees etc you can walk behind
+				*dst = clearFragment;
 				depth = clearDepth[adr];
 				dst->fogged = BIT15(depth);
 				dst->depth = DS_DEPTH15TO24(depth);
@@ -2033,113 +2027,19 @@ void SoftRasterizerEngine::InitFramebuffer(const u32 width, const u32 height, co
 				dst++;
 			}
 		}
-		
-		for(u32 i = 0; i < fragment_count; ++i)
-		{
-			screen[i] = clearFragment;
-		}
 	}
 	else
 	#endif
 	{
-		for(u32 i = 0; i < fragment_count; ++i)
+		FragmentColor *dstColor = screenColor;
+		Fragment *dst = screen;
+		
+		for(u32 i = 0; i < fragment_count; ++i, ++dstColor, ++dst)
 		{
-			screen[i] = clearFragment;
-			screenColor[i] = clearFragmentColor;
+			*dst = clearFragment;
+			*dstColor = clearFragmentColor;
 		}
 	}
-}
-
-template <u32 RENDER_MAGNIFICATION, bool FOG_ALPHA_ONLY>
-void SoftRasterizerEngine::DrawFog_forHighResolution()
-{
-	X432R_STATIC_RENDER_MAGNIFICATION_CHECK();
-	
-	#if 0
-	const u32 fragment_count = mainSoftRasterizer.width * mainSoftRasterizer.height;
-	#else
-	const u32 fragment_count = 256 * 192 * RENDER_MAGNIFICATION * RENDER_MAGNIFICATION;
-	#endif
-	
-	const Fragment *destFragment;
-	FragmentColor *destFragmentColor;
-	u8 fog, fog2;
-	
-	const u8 r = GFX3D_5TO6(gfx3d.renderState.fogColor & 0x1F);
-	const u8 g = GFX3D_5TO6( (gfx3d.renderState.fogColor >> 5) & 0x1F );
-	const u8 b = GFX3D_5TO6( (gfx3d.renderState.fogColor >> 10) & 0x1F );
-	const u8 a = (gfx3d.renderState.fogColor>>16) & 0x1F;
-	
-	for(u32 i = 0; i < fragment_count; ++i)
-	{
-		destFragment = &screen[i];
-		
-		if( !destFragment->fogged ) continue;
-		
-		fog = fogTable[ clamp<u32>(destFragment->depth >> 9, 0, 32767) ];
-		
-		if(fog == 0) continue;
-		
-		destFragmentColor = &screenColor[i];
-		
-		#if 0
-		if(fog == 127)
-		{
-			destFragmentColor->a = (a * 128) >> 7;
-			
-			if( !FOG_ALPHA_ONLY )
-			{
-				destFragmentColor->r = (r * 128) >> 7;
-				destFragmentColor->g = (g * 128) >> 7;
-				destFragmentColor->b = (b * 128) >> 7;
-			}
-		}
-		else
-		{
-			fog2 = 128 - fog;
-			destFragmentColor->a = ( (fog2 * destFragmentColor->a) + (a * fog) ) >> 7;
-			
-			if( !FOG_ALPHA_ONLY )
-			{
-				destFragmentColor->r = ( (fog2 * destFragmentColor->r) + (r * fog) ) >> 7;
-				destFragmentColor->g = ( (fog2 * destFragmentColor->g) + (g * fog) ) >> 7;
-				destFragmentColor->b = ( (fog2 * destFragmentColor->b) + (b * fog) ) >> 7;
-			}
-		}
-		#else
-		if(fog == 127)
-		{
-			if(FOG_ALPHA_ONLY)
-				destFragmentColor->a = (a * 128) >> 7;
-			else
-			{
-				destFragmentColor->r = (r * 128) >> 7;
-				destFragmentColor->g = (g * 128) >> 7;
-				destFragmentColor->b = (b * 128) >> 7;
-			}
-		}
-		else
-		{
-			fog2 = 128 - fog;
-			
-			// フォグの描画結果を標準SoftRasterizerと同じにするためにフォグのalphaを無視
-			if(FOG_ALPHA_ONLY)
-				destFragmentColor->a = ( (fog2 * destFragmentColor->a) + (a * fog) ) >> 7;
-			else
-			{
-				destFragmentColor->r = ( (fog2 * destFragmentColor->r) + (r * fog) ) >> 7;
-				destFragmentColor->g = ( (fog2 * destFragmentColor->g) + (g * fog) ) >> 7;
-				destFragmentColor->b = ( (fog2 * destFragmentColor->b) + (b * fog) ) >> 7;
-			}
-		}
-		#endif
-	}
-	
-	
-	#ifdef X432R_CUSTOMRENDERER_DEBUG
-	if(FOG_ALPHA_ONLY)
-		X432R::ShowDebugMessage("SoftRast FogAlphaOnly");
-	#endif
 }
 #endif
 
@@ -2189,8 +2089,8 @@ namespace X432R
 		#ifndef X432R_CUSTOMSOFTRASTENGINE_ENABLED
 		mainSoftRasterizer.initFramebuffer(mainSoftRasterizer.width, mainSoftRasterizer.height, gfx3d.renderState.enableClearImage ? true : false);
 		#else
-//		mainSoftRasterizer.InitFramebuffer<RENDER_MAGNIFICATION>(gfx3d.renderState.enableClearImage ? true : false);
-		mainSoftRasterizer.InitFramebuffer<RENDER_MAGNIFICATION>(mainSoftRasterizer.width, mainSoftRasterizer.height, gfx3d.renderState.enableClearImage ? true : false);
+//		mainSoftRasterizer.InitFramebuffer<RENDER_MAGNIFICATION>(gfx3d.renderState.enableClearImage);
+		mainSoftRasterizer.InitFramebuffer<RENDER_MAGNIFICATION>(mainSoftRasterizer.width, mainSoftRasterizer.height, gfx3d.renderState.enableClearImage);
 		#endif
 		
 		
@@ -2257,115 +2157,199 @@ namespace X432R
 		return result;
 	}
 	
-	template <u32 RENDER_MAGNIFICATION>
-	void SoftRast_DownscaleFramebuffer()
+	
+	static u8 softRast_FogColorR = 0;
+	static u8 softRast_FogColorG = 0;
+	static u8 softRast_FogColorB = 0;
+	static u8 softRast_FogColorA = 0;
+	
+	template <u32 RENDER_MAGNIFICATION, bool FOG_ALPHA_ONLY>
+	static inline void SoftRast_DrawFog(FragmentColor * const color_fragment, const Fragment * const fragment)
 	{
-		u32 *highreso_buffer = backBuffer.GetHighResolution3DBuffer();
-		const FragmentColor *source_buffer = _screenColor;
-		u32 * const gfx3d_buffer_begin = (u32 *)gfx3d_convertedScreen;
-		u32 *gfx3d_buffer;
+		if( !fragment->fogged ) return;
 		
-		u32 remainder_x, remainder_y;
-		u32 downscaled_y;
-//		u32 downscaled_index;
+		const u8 fog = mainSoftRasterizer.fogTable[ clamp<u32>(fragment->depth >> 9, 0, 32767) ];
 		
-		RGBA8888 color_rgba8888;
-		u16 color_rgb555;
+		if(fog == 0) return;
 		
-		u32 x, y;
+		#if 0
+		if(fog == 127)
+		{
+			color_fragment->a = (softRast_FogColorA * 128) >> 7;
+			
+			if( !FOG_ALPHA_ONLY )
+			{
+				color_fragment->r = (softRast_FogColorR * 128) >> 7;
+				color_fragment->g = (softRast_FogColorG * 128) >> 7;
+				color_fragment->b = (softRast_FogColorB * 128) >> 7;
+			}
+		}
+		else
+		{
+			const u8 fog2 = 128 - fog;
+			
+			color_fragment->a = ( (fog2 * color_fragment->a) + (softRast_FogColorA * fog) ) >> 7;
+			
+			if( !FOG_ALPHA_ONLY )
+			{
+				color_fragment->r = ( (fog2 * color_fragment->r) + (softRast_FogColorR * fog) ) >> 7;
+				color_fragment->g = ( (fog2 * color_fragment->g) + (softRast_FogColorG * fog) ) >> 7;
+				color_fragment->b = ( (fog2 * color_fragment->b) + (softRast_FogColorB * fog) ) >> 7;
+			}
+		}
+		#else
+		// �t�H�O�̕`�挋�ʂ�W��SoftRasterizer�Ɠ����ɂ��邽�߂Ƀt�H�O��alpha�𖳎�
+		if(fog == 127)
+		{
+			if(FOG_ALPHA_ONLY)
+				color_fragment->a = (softRast_FogColorA * 128) >> 7;
+			else
+			{
+				color_fragment->r = (softRast_FogColorR * 128) >> 7;
+				color_fragment->g = (softRast_FogColorG * 128) >> 7;
+				color_fragment->b = (softRast_FogColorB * 128) >> 7;
+			}
+		}
+		else
+		{
+			const u8 fog2 = 128 - fog;
+			
+			if(FOG_ALPHA_ONLY)
+				color_fragment->a = ( (fog2 * color_fragment->a) + (softRast_FogColorA * fog) ) >> 7;
+			else
+			{
+				color_fragment->r = ( (fog2 * color_fragment->r) + (softRast_FogColorR * fog) ) >> 7;
+				color_fragment->g = ( (fog2 * color_fragment->g) + (softRast_FogColorG * fog) ) >> 7;
+				color_fragment->b = ( (fog2 * color_fragment->b) + (softRast_FogColorB * fog) ) >> 7;
+			}
+		}
+		#endif
+	}
+	
+	#if !defined(_MSC_VER) || (_MSC_VER < 1700) || !defined(X432R_PPL_TEST)
+	template <u32 RENDER_MAGNIFICATION, bool FOG_ENABLED, bool FOG_ALPHA_ONLY>
+	static void SoftRast_DownscaleFramebuffer()
+	{
+		u32 * const highresobuffer_begin = backBuffer.GetHighResolution3DBuffer();
+		u32 *highreso_buffer = highresobuffer_begin;
+		FragmentColor *color_buffer = _screenColor;
+		const Fragment *fragment_buffer = _screen;
+		u32 * const gfx3d_buffer = (u32 *)gfx3d_convertedScreen;
+		
+		u32 x, y, remainder_x, remainder_y, downscaled_index;
+		RGBA8888 color_rgba8888, color_tiletopleft, color_tiletopright, color_tilebottomleft;
+		u32 tiletop_index, tilebottom_index, tileleft_x;
+		u32 r, g, b, a;
 		
 		for( y = 0; y < (192 * RENDER_MAGNIFICATION); ++y )
 		{
-			remainder_y = (y % RENDER_MAGNIFICATION) << 16;
-			downscaled_y = (y / RENDER_MAGNIFICATION) * 256;
+			remainder_y = (y % RENDER_MAGNIFICATION);
+			downscaled_index = (y / RENDER_MAGNIFICATION) * 256;
 			
-			for( x = 0; x < (256 * RENDER_MAGNIFICATION); ++x, ++source_buffer, ++highreso_buffer )
+			for( x = 0; x < (256 * RENDER_MAGNIFICATION); ++x, ++color_buffer, ++highreso_buffer )
 			{
 				remainder_x = (x % RENDER_MAGNIFICATION);
-//				downscaled_index = downscaled_y + (x / RENDER_MAGNIFICATION);
 				
-				color_rgba8888 = FragmentColorToRGBA8888(*source_buffer);
+				if(FOG_ENABLED)
+					SoftRast_DrawFog<RENDER_MAGNIFICATION, FOG_ALPHA_ONLY>(color_buffer, fragment_buffer++);
+				
+				color_rgba8888 = FragmentColorToRGBA8888(*color_buffer);
 				
 				*highreso_buffer = color_rgba8888.Color;
 				
-				gfx3d_buffer = gfx3d_buffer_begin + downscaled_y + (x / RENDER_MAGNIFICATION);
+				// Bilinear
+				if( ( remainder_x != (RENDER_MAGNIFICATION - 1) ) || ( remainder_y != (RENDER_MAGNIFICATION - 1) ) ) continue;
 				
-				// 変則NearestNeighbor（中心点が透明だった場合、左上、右上、左下、右下の中で不透明の点を採用する）
-				if( (RENDER_MAGNIFICATION == 2) || ( remainder_y != (1 << 16) ) || (remainder_x != 1) )
-				{
-					switch(remainder_y | remainder_x)
-					{
-						case 0:											// x == 0, y == 0
-							*gfx3d_buffer = color_rgba8888.Color;		// gfx3d_ConvertedScreen内のピクセルフォーマットはRGBA6665だが、一時的にRGBA8888のまま値を保存
-							break;
-						
-						case (RENDER_MAGNIFICATION - 1):
-						case ( (RENDER_MAGNIFICATION - 1) << 16 ):
-							if( (*gfx3d_buffer > 0) || (color_rgba8888.A == 0) ) break;
-							
-							*gfx3d_buffer = color_rgba8888.Color;
-							break;
-						
-						case ( ( (RENDER_MAGNIFICATION - 1) << 16 ) | (RENDER_MAGNIFICATION - 1) ):
-							if( ( (RENDER_MAGNIFICATION == 2) && (color_rgba8888.A == 0) ) || (*gfx3d_buffer > 0) )
-								color_rgba8888 = *gfx3d_buffer;
-							
-//							if( (color_rgba8888.A > 0xF0) && (color_rgba8888.A < 0xFF) )
-//								color_rgba8888.A = 0xFF;
-							
-							*gfx3d_buffer = RGBA8888ToFragmentColor(color_rgba8888).color;			// ピクセルフォーマットをRGBA6665に変換して値を保存
-							break;
-						
-						default:
-							break;
-					}
-					
-					continue;
-				}
+				tiletop_index = ( y - (RENDER_MAGNIFICATION - 1) ) * (256 * RENDER_MAGNIFICATION);
+				tilebottom_index = y * (256 * RENDER_MAGNIFICATION);
+				tileleft_x = x - (RENDER_MAGNIFICATION - 1);
 				
-				if(color_rgba8888.A > 0)		// (x == 1, y == 1)：簡易中心点判定（x2:2画素の右側, x3:3画素の中央, x4:4画素の左から2つめを中心点と見なす）
-					*gfx3d_buffer = color_rgba8888.Color;
+				color_tiletopleft = highresobuffer_begin[tiletop_index + tileleft_x];
+				color_tiletopright = highresobuffer_begin[tiletop_index + x];
+				color_tilebottomleft = highresobuffer_begin[tilebottom_index + tileleft_x];
 				
-/*				#if 1
-				// 変則NearestNeighbor（中心点が透明だった場合、左上、右上、左下、右下の中で不透明の点を採用する）
-				gfx3d_buffer = gfx3d_buffer + downscaled_index;
+				r = color_tiletopleft.R + color_tiletopright.R + color_tilebottomleft.R + color_rgba8888.R;
+				g = color_tiletopleft.G + color_tiletopright.G + color_tilebottomleft.G + color_rgba8888.G;
+				b = color_tiletopleft.B + color_tiletopright.B + color_tilebottomleft.B + color_rgba8888.B;
+				a = color_tiletopleft.A + color_tiletopright.A + color_tilebottomleft.A + color_rgba8888.A;
 				
-				if( (remainder_x == 0) && (remainder_y == 0) )
-				{
-					*gfx3d_buffer = color_rgba8888.Color;		// gfx3d_ConvertedScreen内のピクセルフォーマットはRGBA6665だが、一時的にRGBA8888のまま値を保存
-					continue;
-				}
+				color_rgba8888.R = (u8)std::min<u32>(r / 4, 0xFF);
+				color_rgba8888.G = (u8)std::min<u32>(g / 4, 0xFF);
+				color_rgba8888.B = (u8)std::min<u32>(b / 4, 0xFF);
+				color_rgba8888.A = (u8)std::min<u32>(a / 4, 0xFF);
 				
-				if( (remainder_x == 1) && (remainder_y == 1) && (color_rgba8888.A > 0) )	// 簡易中心点判定（x2:2画素の右側, x3:3画素の中央, x4:4画素の左から2つめを中心点と見なす）
-					*gfx3d_buffer = color_rgba8888.Color;
-				
-				if( ( (remainder_x != 0) && ( remainder_x != (RENDER_MAGNIFICATION - 1) ) ) || ( (remainder_y != 0) && ( remainder_y != (RENDER_MAGNIFICATION - 1) ) ) ) continue;
-				
-				if( (*gfx3d_buffer == 0) && (color_rgba8888.A > 0) )
-					*gfx3d_buffer = color_rgba8888.Color;
-				
-				if( ( remainder_x == (RENDER_MAGNIFICATION - 1) ) && ( remainder_y == (RENDER_MAGNIFICATION - 1) ) )
-				{
-					color_rgba8888 = *gfx3d_buffer;
-					
-					if( (color_rgba8888.A > 0xF0) && (color_rgba8888.A < 0xFF) )
-						color_rgba8888.A = 0xFF;
-					
-					*gfx3d_buffer = RGBA8888ToFragmentColor(color_rgba8888).color;			// ピクセルフォーマットをRGBA6665に変換して値を保存
-				}
-				#else
-				// 簡易NearestNeighbor（x2:2画素の右側, x3:3画素の中央, x4:4画素の左から2つめを中心点と見なす）
-				if( (remainder_x != 1) && (remainder_y != 1) ) continue;
-				
-				if( (color_rgba8888.A > 0xF0) && (color_rgba8888.A < 0xFF) )
-					color_rgba8888.A = 0xFF;
-				
-				gfx3d_buffer[downscaled_index] = RGBA8888ToFragmentColor(color_rgba8888).color;
-				#endif
-*/				
+				gfx3d_buffer[ downscaled_index + (x / RENDER_MAGNIFICATION) ] = RGBA8888ToFragmentColor(color_rgba8888).color;
 			}
 		}
 	}
+	#else
+	template <u32 RENDER_MAGNIFICATION, bool FOG_ENABLED, bool FOG_ALPHA_ONLY>
+	static void SoftRast_DownscaleFramebuffer()
+	{
+		u32 * const highresobuffer_begin = backBuffer.GetHighResolution3DBuffer();
+		FragmentColor * const colorbuffer_begin = _screenColor;
+		const Fragment * const fragmentbuffer_begin = _screen;
+		u32 * const gfx3d_buffer = (u32 *)gfx3d_convertedScreen;
+		
+		concurrency::parallel_for( (u32)0, RENDER_MAGNIFICATION, [&](const u32 offset)
+		{
+			const u32 y_begin = 192 * offset;
+			const u32 y_end = y_begin + 192;
+			
+			const u32 highreso_index = y_begin * 256 * RENDER_MAGNIFICATION;
+			
+			u32 *highreso_buffer = highresobuffer_begin + highreso_index;
+			FragmentColor *color_buffer = colorbuffer_begin + highreso_index;
+			const Fragment *fragment_buffer = fragmentbuffer_begin + highreso_index;
+			
+			u32 x, y, remainder_x, remainder_y, downscaled_index;
+			RGBA8888 color_rgba8888, color_tiletopleft, color_tiletopright, color_tilebottomleft;
+			u32 tiletop_index, tilebottom_index, tileleft_x;
+			u32 r, g, b, a;
+			
+			for(y = y_begin; y < y_end; ++y)
+			{
+				remainder_y = (y % RENDER_MAGNIFICATION);
+				downscaled_index = (y / RENDER_MAGNIFICATION) * 256;
+				
+				for( x = 0; x < (256 * RENDER_MAGNIFICATION); ++x, ++color_buffer, ++highreso_buffer )
+				{
+					remainder_x = (x % RENDER_MAGNIFICATION);
+					
+					if(FOG_ENABLED)
+						SoftRast_DrawFog<RENDER_MAGNIFICATION, FOG_ALPHA_ONLY>(color_buffer, fragment_buffer++);
+					
+					color_rgba8888 = FragmentColorToRGBA8888(*color_buffer);
+					
+					*highreso_buffer = color_rgba8888.Color;
+					
+					// Bilinear
+					if( ( remainder_x != (RENDER_MAGNIFICATION - 1) ) || ( remainder_y != (RENDER_MAGNIFICATION - 1) ) ) continue;
+					
+					tiletop_index = ( y - (RENDER_MAGNIFICATION - 1) ) * (256 * RENDER_MAGNIFICATION);
+					tilebottom_index = y * (256 * RENDER_MAGNIFICATION);
+					tileleft_x = x - (RENDER_MAGNIFICATION - 1);
+					
+					color_tiletopleft = highresobuffer_begin[tiletop_index + tileleft_x];
+					color_tiletopright = highresobuffer_begin[tiletop_index + x];
+					color_tilebottomleft = highresobuffer_begin[tilebottom_index + tileleft_x];
+					
+					r = color_tiletopleft.R + color_tiletopright.R + color_tilebottomleft.R + color_rgba8888.R;
+					g = color_tiletopleft.G + color_tiletopright.G + color_tilebottomleft.G + color_rgba8888.G;
+					b = color_tiletopleft.B + color_tiletopright.B + color_tilebottomleft.B + color_rgba8888.B;
+					a = color_tiletopleft.A + color_tiletopright.A + color_tilebottomleft.A + color_rgba8888.A;
+					
+					color_rgba8888.R = (u8)std::min<u32>(r / 4, 0xFF);
+					color_rgba8888.G = (u8)std::min<u32>(g / 4, 0xFF);
+					color_rgba8888.B = (u8)std::min<u32>(b / 4, 0xFF);
+					color_rgba8888.A = (u8)std::min<u32>(a / 4, 0xFF);
+					
+					gfx3d_buffer[ downscaled_index + (x / RENDER_MAGNIFICATION) ] = RGBA8888ToFragmentColor(color_rgba8888).color;
+				}
+			}
+		});
+	}
+	#endif
 	
 	template <u32 RENDER_MAGNIFICATION>
 	static void SoftRastRenderFinish()
@@ -2376,7 +2360,7 @@ namespace X432R
 		
 		
 		#ifdef X432R_PROCESSTIME_CHECK
-		AutoStopTimeCounter timecounter(timeCounter_3DFinish);
+		AutoStopTimeCounter timecounter(timeCounter_3DFinish1);
 		#endif
 		
 		if(rasterizerCores > 1)
@@ -2391,7 +2375,30 @@ namespace X432R
 		
 		mainSoftRasterizer.framebufferProcess();
 		
-		SoftRast_DownscaleFramebuffer<RENDER_MAGNIFICATION>();
+		
+		const u8 * const fogdensity_pointer = MMU.MMU_MEM[ARMCPU_ARM9][0x40] + 0x360;
+		
+		if( !gfx3d.renderState.enableFog || ( ( fogdensity_pointer[0] == 0 ) && ( fogdensity_pointer[31] == 0 ) ) )
+			SoftRast_DownscaleFramebuffer<RENDER_MAGNIFICATION, false, false>();
+		else
+		{
+			softRast_FogColorR = GFX3D_5TO6(gfx3d.renderState.fogColor & 0x1F);
+			softRast_FogColorG = GFX3D_5TO6( (gfx3d.renderState.fogColor >> 5) & 0x1F );
+			softRast_FogColorB = GFX3D_5TO6( (gfx3d.renderState.fogColor >> 10) & 0x1F );
+			softRast_FogColorA = (gfx3d.renderState.fogColor>>16) & 0x1F;
+			
+			if( !gfx3d.renderState.enableFogAlphaOnly )
+				SoftRast_DownscaleFramebuffer<RENDER_MAGNIFICATION, true, false>();
+			else
+			{
+				SoftRast_DownscaleFramebuffer<RENDER_MAGNIFICATION, true, true>();
+				
+				#ifdef X432R_CUSTOMRENDERER_DEBUG
+				X432R::ShowDebugMessage("SoftRast FogAlphaOnly");
+				#endif
+			}
+		}
+		
 		
 		softRastHasNewData = false;
 	}

@@ -142,7 +142,6 @@ public:
 		
 		SetRomName( (name == NULL) ? filename : (name + 1) );
 		#endif
-		
 		LoadModulePath();
 #if !defined(WIN32) && !defined(DESMUME_COCOA)
 		ReadPathSettings();

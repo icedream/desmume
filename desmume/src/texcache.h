@@ -24,6 +24,12 @@
 
 #include "types.h"
 
+
+//---CUSTOM--->
+#include "X432R_BuildSwitch.h"
+//<---CUSTOM---
+
+
 enum TexCache_TexFormat
 {
 	TexFormat_None, //used when nothing yet is cached
@@ -45,6 +51,12 @@ public:
 		, assumedInvalid(false)
 		, deleteCallback(NULL)
 		, cacheFormat(TexFormat_None)
+		#ifdef X432R_OPENGL_CUSTOMSTENCILTEST2
+		, IsTranslucent(false)
+		#endif
+		#ifdef X432R_HIGHRESO_TEXTURE_TEST
+		, IsDisplayCapturedTexture(false)
+		#endif
 	{}
 	~TexCacheItem() {
 		delete[] decoded;
@@ -77,6 +89,13 @@ public:
 		u8* texture;
 		u8 palette[256*2];
 	} dump;
+	
+	#ifdef X432R_OPENGL_CUSTOMSTENCILTEST2
+	bool IsTranslucent;
+	#endif
+	#ifdef X432R_HIGHRESO_TEXTURE_TEST
+	bool IsDisplayCapturedTexture;
+	#endif
 };
 
 void TexCache_Invalidate();

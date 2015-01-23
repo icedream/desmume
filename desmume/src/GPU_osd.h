@@ -129,9 +129,7 @@ public:
 	
 	#ifdef X432R_CUSTOMRENDERER_ENABLED
 	inline u8 GetLineCount()
-	{
-		return lastLineText;
-	};
+	{	return lastLineText;			};
 	#endif
 };
 

@@ -402,6 +402,13 @@ public:
 		const u32 opaqueColor = TEXFORMAT==TexFormat_32bpp?255:31;
 		u32 palZeroTransparent = (1-((format>>29)&1))*opaqueColor;
 
+		#ifdef X432R_OPENGL_CUSTOMSTENCILTEST2
+		newitem->IsTranslucent = false;
+		#endif
+		#ifdef X432R_HIGHRESO_TEXTURE_TEST
+		newitem->IsDisplayCapturedTexture = false;
+		#endif
+		
 		switch (newitem->mode)
 		{
 		case TEXMODE_A3I5:
@@ -416,6 +423,12 @@ public:
 							*dwdst++ = RGB15TO6665(c,material_3bit_to_5bit[alpha]);
 						else
 							*dwdst++ = RGB15TO32(c,material_3bit_to_8bit[alpha]);
+						
+						#ifdef X432R_OPENGL_CUSTOMSTENCILTEST2
+						if( (alpha > 0) && (alpha < 7) && !newitem->IsTranslucent )
+							newitem->IsTranslucent = true;		// alphaが中間階調の場合に半透明フラグをセット
+						#endif
+						
 						adr++;
 					}
 				}
@@ -632,6 +645,12 @@ public:
 							*dwdst++ = RGB15TO6665(c,alpha);
 						else
 							*dwdst++ = RGB15TO32(c,material_5bit_to_8bit[alpha]);
+						
+						#ifdef X432R_OPENGL_CUSTOMSTENCILTEST2
+						if( (alpha > 0) && (alpha < 31) && !newitem->IsTranslucent )
+							newitem->IsTranslucent = true;		// alphaが中間階調の場合に半透明フラグをセット
+						#endif
+						
 						adr++;
 					}
 				}
@@ -639,6 +658,14 @@ public:
 			}
 		case TEXMODE_16BPP:
 			{
+				#ifdef X432R_HIGHRESO_TEXTURE_TEST
+				if( (ms.numItems == 1) && (sizeX == 256) && (sizeY == 256) && X432R::CheckTextureData( (u16 *)ms.items[0].ptr ) )
+				{
+					newitem->IsDisplayCapturedTexture = true;
+//					break;
+				}
+				#endif
+				
 				for(int j=0;j<ms.numItems;j++) {
 					u16* map = (u16*)ms.items[j].ptr;
 					int len = ms.items[j].len>>1;

@@ -29,12 +29,14 @@
 #include "X432R_BuildSwitch.h"
 #include <locale.h>
 
+#ifndef X432R_DISPLAYMETHOD_OPENGL_DISABLED
 namespace X432R
 {
 //	GLuint GetScreenTexture();
 	u32 GetScreenTexture();
 	void DeleteScreenTexture();
 }
+#endif
 //<---CUSTOM---
 
 

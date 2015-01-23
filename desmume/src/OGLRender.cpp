@@ -113,8 +113,11 @@ OGLEXT(PFNGLENABLEVERTEXATTRIBARRAYPROC, glEnableVertexAttribArray) // Core in v
 OGLEXT(PFNGLDISABLEVERTEXATTRIBARRAYPROC, glDisableVertexAttribArray) // Core in v2.0
 OGLEXT(PFNGLVERTEXATTRIBPOINTERPROC, glVertexAttribPointer) // Core in v2.0
 
+#ifdef X432R_CUSTOMRENDERER_ENABLED
+//OGLEXT(PFNGLGETBUFFERSUBDATAPROC, glGetBufferSubData)	// Core in v1.5 (for PBO: v2.1)
 #ifdef X432R_OPENGL_FOG_ENABLED
-OGLEXT(PFNGLUNIFORM1FVPROC, glUniform1fv) // Core in v2.0
+OGLEXT(PFNGLUNIFORM1FVPROC, glUniform1fv)				// Core in v2.0
+#endif
 #endif
 
 // VAO
@@ -195,8 +198,11 @@ static void OGLLoadEntryPoints_Legacy()
 	INITOGLEXT(PFNGLDISABLEVERTEXATTRIBARRAYPROC, glDisableVertexAttribArray) // Core in v2.0
 	INITOGLEXT(PFNGLVERTEXATTRIBPOINTERPROC, glVertexAttribPointer) // Core in v2.0
 
+	#ifdef X432R_CUSTOMRENDERER_ENABLED
+//	INITOGLEXT(PFNGLGETBUFFERSUBDATAPROC, glGetBufferSubData)	// Core in v1.5 (for PBO: v2.1)
 	#ifdef X432R_OPENGL_FOG_ENABLED
-	INITOGLEXT(PFNGLUNIFORM1FVPROC, glUniform1fv) // Core in v2.0
+	INITOGLEXT(PFNGLUNIFORM1FVPROC, glUniform1fv)				// Core in v2.0
+	#endif
 	#endif
 
 	// VAO
@@ -2281,34 +2287,8 @@ Render3DError OpenGLRenderer_1_2::SetupTexture(const POLY *thePoly, bool enableT
 			
 			glBindTexture(GL_TEXTURE_2D, (GLuint)this->currTexture->texid);
 			
-			#ifndef X432R_OPENGL_TEXTUREFILTER_ENABLED
 			glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
 			glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-			#else
-			switch(params.texFormat)
-			{
-//				case TEXMODE_I2:
-//				case TEXMODE_A3I5:
-//				case TEXMODE_I4:
-				case TEXMODE_I8:
-//				case TEXMODE_A5I3:
-				case TEXMODE_16BPP:
-//				case TEXMODE_4X4:
-					if( !params.enableTransparentColor0 && X432R::openGLTextureFilterEnabled )
-					{
-						glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-						glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-						break;
-					}
-					// fall-through
-				
-				default:
-					glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-					glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-					break;
-			}
-			#endif
-			
 			glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, (params.enableRepeatS ? (params.enableMirroredRepeatS ? OGLRef.stateTexMirroredRepeat : GL_REPEAT) : GL_CLAMP_TO_EDGE));
 			glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, (params.enableRepeatT ? (params.enableMirroredRepeatT ? OGLRef.stateTexMirroredRepeat : GL_REPEAT) : GL_CLAMP_TO_EDGE));
 			
@@ -3210,34 +3190,8 @@ Render3DError OpenGLRenderer_2_0::SetupTexture(const POLY *thePoly, bool enableT
 			
 			glBindTexture(GL_TEXTURE_2D, (GLuint)this->currTexture->texid);
 			
-			#ifndef X432R_OPENGL_TEXTUREFILTER_ENABLED
 			glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
 			glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-			#else
-			switch(params.texFormat)
-			{
-//				case TEXMODE_I2:
-//				case TEXMODE_A3I5:
-//				case TEXMODE_I4:
-				case TEXMODE_I8:
-//				case TEXMODE_A5I3:
-				case TEXMODE_16BPP:
-//				case TEXMODE_4X4:
-					if( !params.enableTransparentColor0 && X432R::openGLTextureFilterEnabled )
-					{
-						glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-						glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-						break;
-					}
-					// fall-through
-				
-				default:
-					glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-					glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-					break;
-			}
-			#endif
-			
 			glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, (params.enableRepeatS ? (params.enableMirroredRepeatS ? GL_MIRRORED_REPEAT : GL_REPEAT) : GL_CLAMP_TO_EDGE));
 			glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, (params.enableRepeatT ? (params.enableMirroredRepeatT ? GL_MIRRORED_REPEAT : GL_REPEAT) : GL_CLAMP_TO_EDGE));
 			
@@ -3299,10 +3253,22 @@ Render3DError OpenGLRenderer_2_1::RenderFinish()
 
 
 #ifdef X432R_CUSTOMRENDERER_ENABLED
+#include "GPU.h"
+
+#if defined(_MSC_VER) && (_MSC_VER >= 1700)
+#ifdef X432R_PPL_TEST
+#include <ppl.h>
+#elif defined(X432R_CPP_AMP_TEST)
+#include <amp.h>
+#endif
+#endif
+
 namespace X432R
 {
 /*	bool CheckOpenGLExtensionSupported(std::string extension_name)
 	{
+		if( (oglrender_init == NULL) || !oglrender_init() ) return false;
+		
 		static std::set<std::string> supportedOpenGLExtensions;
 		
 		if( supportedOpenGLExtensions.size() == 0 )
@@ -3344,6 +3310,7 @@ namespace X432R
 		#endif
 	}
 */	
+	
 	
 	template <u32 RENDER_MAGNIFICATION>
 	static char OGLInit(void)
@@ -3551,7 +3518,7 @@ namespace X432R
 		#endif
 		
 		
-		// é«˜è§£åƒåº¦3Dãƒ¬ãƒ³ãƒ€ãƒªãƒ³ã‚°ç”¨FBOä½œæˆ
+		// ‚‰ğ‘œ“x3DƒŒƒ“ƒ_ƒŠƒ“ƒO—pFBOì¬
 		glGenRenderbuffersEXT(1, &highResolutionRenderbuffer_Color);
 		glGenRenderbuffersEXT(1, &highResolutionRenderbuffer_DepthStencil);
 		
@@ -3562,12 +3529,13 @@ namespace X432R
 		
 		glBindRenderbufferEXT(GL_RENDERBUFFER_EXT, highResolutionRenderbuffer_DepthStencil);
 		glRenderbufferStorageEXT(GL_RENDERBUFFER_EXT, GL_DEPTH24_STENCIL8_EXT, 256 * RENDER_MAGNIFICATION, 192 * RENDER_MAGNIFICATION);
+		glBindRenderbufferEXT(GL_RENDERBUFFER_EXT, 0);
 		
 		glBindFramebufferEXT(GL_FRAMEBUFFER_EXT, highResolutionFramebuffer);
 		glFramebufferRenderbufferEXT(GL_FRAMEBUFFER_EXT, GL_COLOR_ATTACHMENT0_EXT, GL_RENDERBUFFER_EXT, highResolutionRenderbuffer_Color);
 		glFramebufferRenderbufferEXT(GL_FRAMEBUFFER_EXT, GL_DEPTH_ATTACHMENT_EXT, GL_RENDERBUFFER_EXT, highResolutionRenderbuffer_DepthStencil);
 		glFramebufferRenderbufferEXT(GL_FRAMEBUFFER_EXT, GL_STENCIL_ATTACHMENT_EXT, GL_RENDERBUFFER_EXT, highResolutionRenderbuffer_DepthStencil);
-		
+	
 		if( glCheckFramebufferStatusEXT(GL_FRAMEBUFFER_EXT) != GL_FRAMEBUFFER_COMPLETE_EXT )
 		{
 			INFO("OpenGL: Failed to created FBOs. Some emulation features will be disabled.\n");
@@ -3623,17 +3591,39 @@ namespace X432R
 		// Check the maximum number of samples that the driver supports and use that.
 		// Since our target resolution is only 256x192 pixels, using the most samples
 		// possible is the best thing to do.
-		GLint maxSamples = 0;
-		glGetIntegerv(GL_MAX_SAMPLES_EXT, &maxSamples);
+		GLint msaa_samples = 0;
 		
-		if(maxSamples < 2)
+		glGetIntegerv(GL_MAX_SAMPLES_EXT, &msaa_samples);
+		
+		if(msaa_samples < 2)
 		{
 			INFO("OpenGL: Driver does not support at least 2x multisampled FBOs. Multisample antialiasing will be disabled.\n");
 			return OGLERROR_FEATURE_UNSUPPORTED;
 		}
 		
-		else if(maxSamples > OGLRENDER_MAX_MULTISAMPLES)
-			maxSamples = OGLRENDER_MAX_MULTISAMPLES;
+		#ifndef X432R_LOWQUALITYMODE_TEST
+		if(msaa_samples > OGLRENDER_MAX_MULTISAMPLES)
+			msaa_samples = OGLRENDER_MAX_MULTISAMPLES;
+		#else
+		#ifdef X432R_CUSTOMRENDERER_DEBUG
+		const u32 max_samples = msaa_samples;
+		#endif
+		
+		if(lowQualityMsaaEnabled)
+		{
+			if(msaa_samples > 4)
+				msaa_samples = 4;
+			
+			else if(msaa_samples > 2)
+				msaa_samples = 2;
+		}
+		else if(msaa_samples > OGLRENDER_MAX_MULTISAMPLES)
+			msaa_samples = OGLRENDER_MAX_MULTISAMPLES;
+		
+		#ifdef X432R_CUSTOMRENDERER_DEBUG
+		ShowDebugMessage( "MSAA Samples: " + std::to_string(msaa_samples) + " (max:" + std::to_string(max_samples) + ")" );
+		#endif
+		#endif
 		
 		OGLRenderRef &OGLRef = *this->ref;
 		
@@ -3642,9 +3632,9 @@ namespace X432R
 		glGenRenderbuffersEXT(1, &OGLRef.rboMultisampleDepthStencilID);
 		
 		glBindRenderbufferEXT(GL_RENDERBUFFER_EXT, OGLRef.rboMultisampleColorID);
-		glRenderbufferStorageMultisampleEXT(GL_RENDERBUFFER_EXT, maxSamples, GL_RGBA, 256 * RENDER_MAGNIFICATION, 192 * RENDER_MAGNIFICATION);
+		glRenderbufferStorageMultisampleEXT(GL_RENDERBUFFER_EXT, msaa_samples, GL_RGBA, 256 * RENDER_MAGNIFICATION, 192 * RENDER_MAGNIFICATION);
 		glBindRenderbufferEXT(GL_RENDERBUFFER_EXT, OGLRef.rboMultisampleDepthStencilID);
-		glRenderbufferStorageMultisampleEXT(GL_RENDERBUFFER_EXT, maxSamples, GL_DEPTH24_STENCIL8_EXT, 256 * RENDER_MAGNIFICATION, 192 * RENDER_MAGNIFICATION);
+		glRenderbufferStorageMultisampleEXT(GL_RENDERBUFFER_EXT, msaa_samples, GL_DEPTH24_STENCIL8_EXT, 256 * RENDER_MAGNIFICATION, 192 * RENDER_MAGNIFICATION);
 		
 		// Set up multisampled rendering FBO
 		glGenFramebuffersEXT(1, &OGLRef.fboMultisampleRenderID);
@@ -3691,9 +3681,6 @@ namespace X432R
 	{
 		OGLRenderRef &OGLRef = *this->ref;
 		
-		if( !this->isMultisampledFBOSupported && CommonSettings.GFX3D_Renderer_Multisample )
-			CommonSettings.GFX3D_Renderer_Multisample = false;
-		
 		OGLRef.selectedRenderingFBO = (this->isMultisampledFBOSupported && CommonSettings.GFX3D_Renderer_Multisample) ? OGLRef.fboMultisampleRenderID : highResolutionFramebuffer;
 		glBindFramebufferEXT(GL_FRAMEBUFFER_EXT, OGLRef.selectedRenderingFBO);
 		
@@ -3715,7 +3702,6 @@ namespace X432R
 		
 		return OGLERROR_NOERR;
 	}
-	
 	
 	template <u32 RENDER_MAGNIFICATION>
 	Render3DError OpenGLRenderer_X432::ReadBackPixels()
@@ -3825,12 +3811,6 @@ namespace X432R
 			glUniform1fv(uniformFogDensity, 32, fog_density);
 			
 			glFogfv(GL_FOG_COLOR, fog_color);
-			
-			
-			#ifdef X432R_CUSTOMRENDERER_DEBUG
-//			if( alpha_only && (gfx3d.polylist->count > 0) )
-//				X432R::ShowDebugMessage("OpenGL FogAlphaOnly");
-			#endif
 		}
 		#endif
 		
@@ -3860,40 +3840,116 @@ namespace X432R
 		
 		static const unsigned int indexIncrementLUT[] = {3, 6, 3, 6, 3, 4, 3, 4};
 		
-		for(u32 i = 0; i < polyCount; i++)
+		
+		#if defined(X432R_OPENGL_CUSTOMSTENCILTEST) && ( !defined(X432R_OPENGL_2PASSSHADOW_TEST) || defined(X432R_CUSTOMRENDERER_DEBUG) )
+		#ifdef X432R_CUSTOMRENDERER_DEBUG
+		u32 shadow_count = 0;
+		u32 shadow_group_count = 0;
+//		bool alphaDepthWriteDisabled = false;
+		#endif
+		
+		const POLY *poly;
+		u8 poly_id;
+		
+		shadowPolygonIDs.clear();
+		
+		for(u32 i = 0; i < polyCount; ++i)
+		{
+			poly = &polyList->list[i];
+			
+//			if( !alphaDepthWriteDisabled && !poly->getAttributeEnableAlphaDepthWrite() )
+//				alphaDepthWriteDisabled = true;
+			
+			if( poly->getAttributePolygonMode() != 3 ) continue;
+			
+			poly_id = poly->getAttributePolygonID();
+			
+			if(poly_id == 0) continue;
+			
+			#ifdef X432R_CUSTOMRENDERER_DEBUG
+			++shadow_count;
+			#endif
+			
+			if( std::find( shadowPolygonIDs.begin(), shadowPolygonIDs.end(), poly_id ) != shadowPolygonIDs.end() ) continue;
+			
+			shadowPolygonIDs.push_back(poly_id);
+		}
+		
+		#ifdef X432R_CUSTOMRENDERER_DEBUG
+		shadow_group_count = shadowPolygonIDs.size();
+		
+		if(shadow_count > 0)
+			ShowDebugMessage( "ShadowPolygon:" + std::to_string(shadow_count) + "/" + std::to_string(shadow_group_count) );
+		
+//		if(alphaDepthWriteDisabled)
+//			ShowDebugMessage("OpenGL AlphaDepthWrite: Disabled");
+		#endif
+		#endif
+		
+		#if defined(X432R_OPENGL_CUSTOMSTENCILTEST) && defined(X432R_OPENGL_2PASSSHADOW_TEST)
+		bool is_shadow;
+		#endif
+		
+		for(u32 i = 0; i < polyCount; ++i)
 		{
 			const POLY *poly = &polyList->list[ indexList->list[i] ];
 			
+			#if defined(X432R_OPENGL_CUSTOMSTENCILTEST) && defined(X432R_OPENGL_2PASSSHADOW_TEST)
+			is_shadow = ( poly->getAttributePolygonMode() == 3 );
+			#endif
+			
+			#ifndef X432R_OPENGL_CUSTOMSTENCILTEST2
 			// Set up the polygon if it changed
-			if(lastPolyAttr != poly->polyAttr || i == 0)
+			if( (lastPolyAttr != poly->polyAttr) || (i == 0) )
 			{
 				lastPolyAttr = poly->polyAttr;
-				this->SetupPolygon(poly);
 				
-				#ifdef X432R_OPENGL_FOG_ENABLED
-				if( !glFogEnabled || !poly->getAttributeEnableFog() )
-				{
-//					glDisable(GL_FOG);
-					glUniform1i(uniformFogEnabled, 0);
-				}
+				#if !defined(X432R_OPENGL_CUSTOMSTENCILTEST) || !defined(X432R_OPENGL_2PASSSHADOW_TEST)
+				this->SetupPolygon(poly);
+				#else
+				if(is_shadow)
+					this->SetupShadowPolygon(poly, true);
 				else
-				{
-//					glEnable(GL_FOG);
-					glUniform1i(uniformFogEnabled, 1);
-				}
+					this->SetupPolygon(poly);
 				#endif
 			}
 			
 			// Set up the texture if it changed
-			if(lastTexParams != poly->texParam || lastTexPalette != poly->texPalette || i == 0)
+			if( (lastTexParams != poly->texParam) || (lastTexPalette != poly->texPalette) || (i == 0) )
 			{
 				lastTexParams = poly->texParam;
 				lastTexPalette = poly->texPalette;
-				this->SetupTexture(poly, renderState->enableTexturing);
+				
+				this->SetupTexture<RENDER_MAGNIFICATION>(poly, renderState->enableTexturing);
+			}
+			#else
+			// Set up the texture if it changed
+			if( (lastTexParams != poly->texParam) || (lastTexPalette != poly->texPalette) || (i == 0) )
+			{
+				lastTexParams = poly->texParam;
+				lastTexPalette = poly->texPalette;
+				
+				this->SetupTexture<RENDER_MAGNIFICATION>(poly, renderState->enableTexturing);
 			}
 			
+			// Set up the polygon if it changed
+			if( (lastPolyAttr != poly->polyAttr) || (i == 0) )
+			{
+				lastPolyAttr = poly->polyAttr;
+				
+				#if !defined(X432R_OPENGL_CUSTOMSTENCILTEST) || !defined(X432R_OPENGL_2PASSSHADOW_TEST)
+				this->SetupPolygon(poly);
+				#else
+				if(is_shadow)
+					this->SetupShadowPolygon(poly, true);
+				else
+					this->SetupPolygon(poly);
+				#endif
+			}
+			#endif
+			
 			// Set up the viewport if it changed
-			if(lastViewport != poly->viewport || i == 0)
+			if( (lastViewport != poly->viewport) || (i == 0) )
 			{
 				lastViewport = poly->viewport;
 				this->SetupViewport<RENDER_MAGNIFICATION>(poly);
@@ -3909,6 +3965,18 @@ namespace X432R
 			// Render the polygon
 			const unsigned int vertIndexCount = indexIncrementLUT[poly->vtxFormat];
 			glDrawElements(polyPrimitive, vertIndexCount, GL_UNSIGNED_SHORT, indexBufferPtr);
+			
+			
+			#if defined(X432R_OPENGL_CUSTOMSTENCILTEST) && defined(X432R_OPENGL_2PASSSHADOW_TEST)
+			if( is_shadow && ( poly->getAttributePolygonID() != 0 ) )
+			{
+				this->SetupShadowPolygon(poly, false);
+				
+				glDrawElements(polyPrimitive, vertIndexCount, GL_UNSIGNED_SHORT, indexBufferPtr);
+			}
+			#endif
+			
+			
 			indexBufferPtr += vertIndexCount;
 		}
 		
@@ -4164,31 +4232,473 @@ namespace X432R
 		static u32 lastClearDepth = 0;
 		static u8 lastClearStencil = 0;
 		
-		if (r != last_r || g != last_g || b != last_b || a != last_a)
+		#ifdef X432R_OPENGL_FOG_ENABLED
+/*		const bool clear_fogged = BIT15(gfx3d.renderState.clearColor);
+		const u32 clear_depth = clearDepth;
+		
+		u32 fog_color = ;
+		
+		r = ;
+		g = ;
+		b = ;
+		a = ;
+*/		#endif
+		
+		if( (r != last_r) || (g != last_g) || (b != last_b) || (a != last_a) )
 		{
 			last_r = r;
 			last_g = g;
 			last_b = b;
 			last_a = a;
-			glClearColor(divide5bitBy31_LUT[r], divide5bitBy31_LUT[g], divide5bitBy31_LUT[b], divide5bitBy31_LUT[a]);
+			
+			if(a == 0)
+				glClearColor(0.0f, 0.0f, 0.0f, 0.0f);
+			else
+				glClearColor( divide5bitBy31_LUT[r], divide5bitBy31_LUT[g], divide5bitBy31_LUT[b], divide5bitBy31_LUT[a] );
 		}
 		
-		if (clearDepth != lastClearDepth)
+		if(clearDepth != lastClearDepth)
 		{
 			lastClearDepth = clearDepth;
-			glClearDepth((GLfloat)clearDepth / (GLfloat)0x00FFFFFF);
+			glClearDepth( (GLfloat)clearDepth / (GLfloat)0x00FFFFFF );
 		}
 		
-		if (clearStencil != lastClearStencil)
+		#ifndef X432R_OPENGL_CUSTOMSTENCILTEST
+		if(clearStencil != lastClearStencil)
 		{
 			lastClearStencil = clearStencil;
 			glClearStencil(clearStencil);
 		}
+		#elif !defined(X432R_OPENGL_2PASSSHADOW_TEST)
+		if(lastClearStencil != 0xFF)
+		{
+			lastClearStencil = 0xFF;
+			glClearStencil(0xFF);
+		}
+		#else
+		if(clearStencil != lastClearStencil)
+		{
+			lastClearStencil = clearStencil;
+			glClearStencil(clearStencil << 2);
+		}
+		#endif
 		
 		glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT | GL_STENCIL_BUFFER_BIT);
 		
 		return OGLERROR_NOERR;
 	}
+	
+	
+	Render3DError OpenGLRenderer_X432::SetupPolygon(const POLY *thePoly)
+	{
+//		static unsigned int lastTexBlendMode = 0;
+		
+		OGLRenderRef &OGLRef = *this->ref;
+		const PolygonAttributes attr = thePoly->getAttributes();
+		
+		// Set up polygon ID
+		glUniform1i(OGLRef.uniformPolyID, attr.polygonID);
+		
+		// Set up alpha value
+		const GLfloat thePolyAlpha = ( !attr.isWireframe && attr.isTranslucent ) ? divide5bitBy31_LUT[attr.alpha] : 1.0f;
+		glUniform1f(OGLRef.uniformPolyAlpha, thePolyAlpha);
+		
+		
+		// Set up depth test mode
+		static const GLenum oglDepthFunc[2] = {GL_LESS, GL_EQUAL};
+		glDepthFunc( oglDepthFunc[attr.enableDepthTest] );
+		
+		// Set up culling mode
+		static const GLenum oglCullingMode[4] = {GL_FRONT_AND_BACK, GL_FRONT, GL_BACK, 0};
+		GLenum cullingMode = oglCullingMode[attr.surfaceCullingMode];
+		
+		if(cullingMode == 0)
+		{
+			xglDisable(GL_CULL_FACE);
+		}
+		else
+		{
+			xglEnable(GL_CULL_FACE);
+			glCullFace(cullingMode);
+		}
+		
+		
+		#ifndef X432R_OPENGL_CUSTOMSTENCILTEST
+		static int lastStencilState = -1;
+		
+		// Set up depth write
+		GLboolean enableDepthWrite = GL_TRUE;
+		
+		// Handle shadow polys. Do this after checking for depth write, since shadow polys
+		// can change this too.
+		if(attr.polygonMode == 3)
+		{
+			xglEnable(GL_STENCIL_TEST);
+			if(attr.polygonID == 0)
+			{
+				enableDepthWrite = GL_FALSE;
+				if(lastStencilState != 0)
+				{
+					lastStencilState = 0;
+					//when the polyID is zero, we are writing the shadow mask.
+					//set stencilbuf = 1 where the shadow volume is obstructed by geometry.
+					//do not write color or depth information.
+					glStencilFunc(GL_ALWAYS, 65, 255);
+					glStencilOp(GL_KEEP, GL_REPLACE, GL_KEEP);
+					glColorMask(GL_FALSE, GL_FALSE, GL_FALSE, GL_FALSE);
+				}
+			}
+			else
+			{
+				enableDepthWrite = GL_TRUE;
+				if(lastStencilState != 1)
+				{
+					lastStencilState = 1;
+					//when the polyid is nonzero, we are drawing the shadow poly.
+					//only draw the shadow poly where the stencilbuf==1.
+					//I am not sure whether to update the depth buffer here--so I chose not to.
+					glStencilFunc(GL_EQUAL, 65, 255);
+					glStencilOp(GL_KEEP, GL_KEEP, GL_KEEP);
+					glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
+				}
+			}
+		}
+		else
+		{
+			xglEnable(GL_STENCIL_TEST);
+			if(attr.isTranslucent)
+			{
+				lastStencilState = 3;
+				glStencilFunc(GL_NOTEQUAL, attr.polygonID, 255);
+				glStencilOp(GL_KEEP, GL_KEEP, GL_REPLACE);
+				glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
+			}
+			else if(lastStencilState != 2)
+			{
+				lastStencilState = 2;
+				glStencilFunc(GL_ALWAYS, 64, 255);
+				glStencilOp(GL_REPLACE, GL_REPLACE, GL_REPLACE);
+				glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
+			}
+		}
+		
+		if(attr.isTranslucent && !attr.enableAlphaDepthWrite)
+		{
+			enableDepthWrite = GL_FALSE;
+		}
+		
+		glDepthMask(enableDepthWrite);
+		
+		#elif !defined(X432R_OPENGL_2PASSSHADOW_TEST)
+		// memo: SoftRast‚Å‚Í5‚Â‚ÌƒXƒeƒ“ƒVƒ‹ƒoƒbƒtƒ@‚ªg—p‚³‚ê‚Ä‚¢‚é
+		// 
+		// Fragment.polyid.opaque
+		// ‰Šú’l: (renderState->clearColor >> 24) & 0x3F
+		// •s“§–¾ƒ|ƒŠƒSƒ“•`‰æ‚ÉpolyID‚ğƒZƒbƒg
+		// 
+		// Fragment.polyid.translucent
+		// ‰Šú’l: 0xFF
+		// ”¼“§–¾ƒ|ƒŠƒSƒ“•`‰æ‚ÉpolyID‚ğƒZƒbƒg, “¯ˆêID‚È‚ç•`‰æ‚ğskip
+		// 
+		// Fragment.stencil
+		// ‰Šú’l: 0
+		// shadow—p
+		// (ID == 0) •`‰æ‚É+1
+		// (ID != 0) •`‰æ‚É-1 (‚½‚¾‚µFragment.polyid.opaque‚É“¯ˆêID‚ªƒZƒbƒg‚³‚ê‚Ä‚¢‚éê‡‚Í•`‰æ‚ğskip)
+		// 
+		// Fragment.fogged
+		// ‰Šú’l: BIT15(gfx3d.renderState.clearColor)
+		// ƒtƒHƒO•`‰æƒtƒ‰ƒO
+		// SoftRast‚Å‚Í‘Sƒ|ƒŠƒSƒ“‚ğ•`‰æŒãAƒtƒŒ[ƒ€ƒoƒbƒtƒ@‚ÌFragment.depth‚ÆFragment.fogged‚ğ—p‚¢‚ÄƒtƒHƒO‚ğ‡¬‚·‚é
+		// OpenGL‚Ìƒtƒ‰ƒOƒƒ“ƒgƒVƒF[ƒ_‚Íƒ|ƒŠƒSƒ“–ˆ‚Éˆ—‚ğs‚¤‚½‚ßAƒtƒHƒO‚Ìalpha’l‚ğƒ|ƒŠƒSƒ“‚É”½‰f‚³‚¹‚é‚Æ³‚µ‚­•`‰æ‚Å‚«‚È‚¢
+		// ƒtƒHƒO‚ğŠ®‘S‚ÉÄŒ»‚·‚é‚É‚Í
+		// 
+		// Fragment.isTranslucentPoly
+		// ‰Šú’l: 0
+		// EdgeMarking—pH
+		// ”¼“§–¾ƒ|ƒŠƒSƒ“‚È‚çEdgeMarking‚Ìˆ—‚ğskip
+		
+		if(attr.polygonMode == 3)		// polygonMode 0:modulate 1:decal 3:toon/highlight(gfx3d.renderState.shading‚Åtoon/highlight‘I‘ğ) 3:shadow
+		{
+			xglEnable(GL_STENCIL_TEST);
+			
+			if(attr.polygonID == 0)
+			{
+				glStencilFunc(GL_NOTEQUAL, 0x80, 0xFF);
+				glStencilOp(GL_KEEP, GL_ZERO, GL_KEEP);						// ƒfƒvƒXƒeƒXƒgfail‚Ì‚İƒXƒeƒ“ƒVƒ‹’l‚É0‚ğƒZƒbƒg(clearStencil‚Í0xFF‚ÉŒÅ’è‚µ‚Ä‚µ‚Ü‚¤)
+				glColorMask(GL_FALSE, GL_FALSE, GL_FALSE, GL_FALSE);
+				glDepthMask(GL_FALSE);
+			}
+			else
+			{
+				glStencilFunc(GL_EQUAL, 0, 0xFF);							// ƒXƒeƒ“ƒVƒ‹’l‚É0‚ªƒZƒbƒg‚³‚ê‚Ä‚¢‚é•”•ª‚Ì‚İƒVƒƒƒhƒE‚ğ•`‰æ
+//				glStencilOp(GL_KEEP, GL_KEEP, GL_INVERT);					// 1‰ñƒVƒƒƒhƒE‚ğ•`‰æ‚µ‚½‚çƒXƒeƒ“ƒVƒ‹’l‚ğƒŠƒZƒbƒg(0 ¨ 0xFF)
+				glStencilOp(GL_KEEP, GL_KEEP, GL_KEEP);						// ƒXƒeƒ“ƒVƒ‹’l‚ğƒŠƒZƒbƒg‚µ‚È‚¢(•¡”‰ñƒVƒƒƒhƒE‚ğ•`‰æ‰Â”\)
+				glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
+				glDepthMask(GL_TRUE);
+			}
+		}
+		else if( attr.isTranslucent || ( std::find( shadowPolygonIDs.begin(), shadowPolygonIDs.end(), attr.polygonID ) == shadowPolygonIDs.end() ) )
+		{
+			xglDisable(GL_STENCIL_TEST);
+			glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
+			
+			#ifndef X432R_OPENGL_CUSTOMSTENCILTEST2
+			#if 1
+			if( !attr.isTranslucent || ( (attr.polygonMode == 1) && attr.isOpaque ) || attr.enableAlphaDepthWrite )		// mode‚ªdecal‚Ìê‡‚ÍƒeƒNƒXƒ`ƒƒ‚ÌƒAƒ‹ƒtƒ@’l‚ª–³‹‚³‚ê‚é‚½‚ß attr.isTranslucent && attr.isOpaque ‚È‚çisTranslucent‚ğ–³‹
+				glDepthMask(GL_TRUE);
+			else
+				glDepthMask(GL_FALSE);
+			#else
+			if(attr.isOpaque || attr.enableAlphaDepthWrite)		// ˆê•”‚Ìƒ|ƒŠƒSƒ“‚ª³í‚É•`‰æ‚³‚ê‚È‚¢–â‘è‚ª‰ü‘P‚·‚é‚ªA•›ì—p‚ ‚è
+				glDepthMask(GL_TRUE);							// SoftRast‚Å‚Íƒtƒ‰ƒOƒƒ“ƒg–ˆ‚Ìƒ|ƒŠƒSƒ“EƒeƒNƒXƒ`ƒƒF‚Ì‡¬Œ‹‰Ê‚ğŒ©‚ÄDepth’l‘‚«‚İ‚Ì‰Â”Û‚ğ”»’è‚µ‚Ä‚¢‚é‚ªAOpenGL‚Å‚Íƒ|ƒŠƒSƒ“–ˆ‚ÉON/OFF‚µ‚Ä‚¢‚é‚½‚ßŠ®‘S‚ÉÄŒ»‚Å‚«‚Ä‚¢‚È‚¢
+			else
+				glDepthMask(GL_FALSE);
+			#endif
+			#else
+			if( !attr.isTranslucent || ( (attr.polygonMode == 1) && attr.isOpaque ) || !isCurrentTextureTranslucent || attr.enableAlphaDepthWrite )		// mode‚ªdecal‚Ìê‡‚ÍƒeƒNƒXƒ`ƒƒ‚ÌƒAƒ‹ƒtƒ@’l‚ª–³‹‚³‚ê‚é‚½‚ß attr.isTranslucent && attr.isOpaque ‚È‚çisTranslucent‚ğ–³‹
+				glDepthMask(GL_TRUE);
+			else
+				glDepthMask(GL_FALSE);
+			#endif
+		}
+		else
+		{
+			// shadowƒ|ƒŠƒSƒ“‚Æ“¯ˆêIDƒOƒ‹[ƒv‚Ìê‡‚ÍƒXƒeƒ“ƒVƒ‹’l‚É0x80‚ğƒZƒbƒgishadowƒ|ƒŠƒSƒ“‚ª•¡”‚ ‚éê‡A³í‚É•`‰æ‚³‚ê‚È‚¢‰Â”\«‚ ‚èj
+			xglEnable(GL_STENCIL_TEST);
+			glStencilFunc(GL_ALWAYS, 0x80, 0xFF);
+//			glStencilOp(GL_REPLACE, GL_REPLACE, GL_REPLACE);
+			glStencilOp(GL_KEEP, GL_KEEP, GL_REPLACE);
+			glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
+			glDepthMask(GL_TRUE);
+		}
+		#else
+		// OpenGL—pFƒXƒeƒ“ƒVƒ‹ƒoƒbƒtƒ@8bit
+		// 1111 1100	bit2-7: polygonID 0`3F				func:GL_ALWAYS		ref:(polygonID << 2)		mask:0xFF
+		// 000 00011	bit0-1: shadowƒtƒ‰ƒO
+		
+		if( attr.isTranslucent && ( (attr.polygonMode != 1) || !attr.isOpaque ) )		// mode‚ªdecal‚Ìê‡‚ÍƒeƒNƒXƒ`ƒƒ‚ÌƒAƒ‹ƒtƒ@’l‚ª–³‹‚³‚ê‚é‚½‚ß attr.isTranslucent && attr.isOpaque ‚È‚çisTranslucent‚ğ–³‹
+		{
+			xglDisable(GL_STENCIL_TEST);
+			
+			glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
+			glDepthMask(attr.enableAlphaDepthWrite ? GL_TRUE : GL_FALSE);
+		}
+		else
+		{
+			xglEnable(GL_STENCIL_TEST);
+			
+			glStencilFunc( GL_ALWAYS, (attr.polygonID << 2), 0xFF );
+			glStencilOp(GL_KEEP, GL_KEEP, GL_REPLACE);
+			
+			glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
+			glDepthMask(GL_TRUE);
+		}
+		#endif
+		
+		
+/*		// (clearcolor.A == 0)‚Ìê‡‚Å‚àclearcolor‚Æfragmentcolor‚ª‡¬‚³‚ê‚Ä‚µ‚Ü‚¤‚½‚ß•\¦F‚ª‚¨‚©‚µ‚­‚È‚éŒ»Û‚ğ‰ñ”ğ
+		if( (attr.polygonMode != 3) && (attr.alpha > 0) && (attr.alpha < 31) )
+		{
+			glBlendFuncSeparate(GL_ONE, GL_ZERO, GL_SRC_ALPHA, GL_DST_ALPHA);
+//			glBlendEquationSeparate(GL_FUNC_ADD, GL_MAX);
+		}
+		else
+		{
+			glBlendFuncSeparate(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA, GL_SRC_ALPHA, GL_DST_ALPHA);
+//			glBlendEquationSeparate(GL_FUNC_ADD, GL_MAX);
+		}
+*/		
+		
+		// Set up texture blending mode
+//		if(attr.polygonMode != lastTexBlendMode)
+//		{
+//			lastTexBlendMode = attr.polygonMode;
+			glUniform1i(OGLRef.uniformPolygonMode, attr.polygonMode);
+			
+			// Update the toon table if necessary
+			if( this->toonTableNeedsUpdate && (attr.polygonMode == 2) )
+			{
+				this->UploadToonTable(this->currentToonTable16);
+				this->toonTableNeedsUpdate = false;
+			}
+//		}
+		
+		
+		#ifdef X432R_OPENGL_FOG_ENABLED
+		if( !glFogEnabled || !attr.enableRenderFog || (attr.alpha == 0) || ( (attr.polygonMode == 3) && (attr.polygonID == 0) ) )
+		{
+//			glDisable(GL_FOG);
+			glUniform1i(uniformFogEnabled, 0);
+		}
+		else
+		{
+//			glEnable(GL_FOG);
+			glUniform1i(uniformFogEnabled, 1);
+		}
+		#endif
+		
+		
+		return OGLERROR_NOERR;
+	}
+	
+	template <u32 RENDER_MAGNIFICATION>
+	Render3DError OpenGLRenderer_X432::SetupTexture(const POLY *thePoly, bool enableTexturing)
+	{
+		OGLRenderRef &OGLRef = *this->ref;
+		const PolygonTexParams params = thePoly->getTexParams();
+		
+		// Check if we need to use textures
+		if (thePoly->texParam == 0 || params.texFormat == TEXMODE_NONE || !enableTexturing)
+		{
+			glUniform1i(OGLRef.uniformHasTexture, GL_FALSE);
+			return OGLERROR_NOERR;
+		}
+		
+		glUniform1i(OGLRef.uniformHasTexture, GL_TRUE);
+		
+		//	texCacheUnit.TexCache_SetTexture<TexFormat_32bpp>(format, texpal);
+		TexCacheItem *newTexture = TexCache_SetTexture(TexFormat_32bpp, thePoly->texParam, thePoly->texPalette);
+		if(newTexture != this->currTexture)
+		{
+			this->currTexture = newTexture;
+			//has the ogl renderer initialized the texture?
+			if(!this->currTexture->deleteCallback)
+			{
+				this->currTexture->deleteCallback = texDeleteCallback;
+				
+				if(OGLRef.freeTextureIDs.empty())
+				{
+					this->ExpandFreeTextures();
+				}
+				
+				this->currTexture->texid = (u64)OGLRef.freeTextureIDs.front();
+				OGLRef.freeTextureIDs.pop();
+				
+				glBindTexture(GL_TEXTURE_2D, (GLuint)this->currTexture->texid);
+				glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+				glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+				glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, (params.enableRepeatS ? (params.enableMirroredRepeatS ? GL_MIRRORED_REPEAT : GL_REPEAT) : GL_CLAMP_TO_EDGE));
+				glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, (params.enableRepeatT ? (params.enableMirroredRepeatT ? GL_MIRRORED_REPEAT : GL_REPEAT) : GL_CLAMP_TO_EDGE));
+				
+				
+				#ifdef X432R_OPENGL_CUSTOMSTENCILTEST2
+				isCurrentTextureTranslucent = newTexture->IsTranslucent;
+				#endif
+				
+				#ifndef X432R_HIGHRESO_TEXTURE_TEST
+				glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, this->currTexture->sizeX, this->currTexture->sizeY, 0, GL_RGBA, GL_UNSIGNED_BYTE, this->currTexture->decoded);
+				#else
+				const u32 *highreso_texture_data = NULL;
+				
+				if(newTexture->IsDisplayCapturedTexture)
+				{
+					highreso_texture_data = X432R::backBuffer.GetHighResolutionTextureBuffer();
+					
+					#ifdef X432R_CUSTOMRENDERER_DEBUG
+					X432R::ShowDebugMessage("displaycapture->texture");
+					#endif
+				}
+				
+				if(highreso_texture_data == NULL)
+					glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, this->currTexture->sizeX, this->currTexture->sizeY, 0, GL_RGBA, GL_UNSIGNED_BYTE, this->currTexture->decoded);
+				else
+//					glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, 256 * RENDER_MAGNIFICATION, 192 * RENDER_MAGNIFICATION, 0, GL_RGBA, GL_UNSIGNED_BYTE, highreso_texture_data);
+					glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, 256 * RENDER_MAGNIFICATION, 192 * RENDER_MAGNIFICATION, 0, GL_BGRA, GL_UNSIGNED_BYTE, highreso_texture_data);
+				#endif
+			}
+			else
+			{
+				//otherwise, just bind it
+				glBindTexture(GL_TEXTURE_2D, (GLuint)this->currTexture->texid);
+			}
+			
+			glUniform2f(OGLRef.uniformTexScale, this->currTexture->invSizeX, this->currTexture->invSizeY);
+		}
+		
+		return OGLERROR_NOERR;
+	}
+	
+	#ifdef X432R_OPENGL_2PASSSHADOW_TEST
+	void OpenGLRenderer_X432::SetupShadowPolygon(const POLY *thePoly, bool first_pass)
+	{
+		OGLRenderRef &OGLRef = *this->ref;
+		const PolygonAttributes attr = thePoly->getAttributes();
+		
+		
+		if(first_pass)
+		{
+			// Set up polygon ID
+			glUniform1i(OGLRef.uniformPolyID, 0);
+			
+			
+			// Set up alpha value
+			const GLfloat thePolyAlpha = ( !attr.isWireframe && attr.isTranslucent ) ? divide5bitBy31_LUT[attr.alpha] : 1.0f;
+			glUniform1f(OGLRef.uniformPolyAlpha, thePolyAlpha);
+			
+			
+			// Set up depth test mode
+			static const GLenum oglDepthFunc[2] = {GL_LESS, GL_EQUAL};
+			glDepthFunc( oglDepthFunc[attr.enableDepthTest] );
+			
+			
+			// Set up culling mode
+			static const GLenum oglCullingMode[4] = {GL_FRONT_AND_BACK, GL_FRONT, GL_BACK, 0};
+			GLenum cullingMode = oglCullingMode[attr.surfaceCullingMode];
+		
+			if(cullingMode == 0)
+			{
+				xglDisable(GL_CULL_FACE);
+			}
+			else
+			{
+				xglEnable(GL_CULL_FACE);
+				glCullFace(cullingMode);
+			}
+			
+			
+			xglEnable(GL_STENCIL_TEST);
+			
+			if(attr.polygonID == 0)
+			{
+//				glStencilFunc(GL_ALWAYS, 0, 0);
+				glStencilFunc(GL_NOTEQUAL, 1, 0x01);						// shadowƒtƒ‰ƒO‚ªOFF‚Ìê‡‚Ì‚İ”½‰f
+				glStencilOp(GL_KEEP, GL_INCR, GL_KEEP);						// ƒfƒvƒXƒeƒXƒgfail‚ÉƒXƒeƒ“ƒVƒ‹’l‚ğ+1‚µ‚Äbit0‚Ìshadowƒtƒ‰ƒO‚ğON
+			}
+			else
+			{
+				glStencilFunc(GL_EQUAL, (attr.polygonID << 2) + 1, 0xFF);
+				glStencilOp(GL_KEEP, GL_KEEP, GL_DECR);						// IDƒOƒ‹[ƒv‚ª“¯ˆê‚Ìƒ|ƒŠƒSƒ“‚ª‘¶İ‚·‚éê‡‚Íshadowƒtƒ‰ƒO‚ğOFF
+				// “¯ˆê‰ÓŠ‚ÉƒVƒƒƒhƒE‚ğ•¡”‰ñ•`‰æ‚µ‚½ê‡‚É–â‘è‚ªo‚é‚©‚à
+			}
+			
+			glColorMask(GL_FALSE, GL_FALSE, GL_FALSE, GL_FALSE);			// Color^Depthƒoƒbƒtƒ@‚Ö‚Ì‘‚«‚İ‚ğ–³Œø‰»
+			glDepthMask(GL_FALSE);
+			
+			
+			// Set up texture blending mode
+			glUniform1i(OGLRef.uniformPolygonMode, attr.polygonMode);
+		}
+		else
+		{
+			// Set up polygon ID
+			glUniform1i(OGLRef.uniformPolyID, attr.polygonID);
+			
+			
+			xglEnable(GL_STENCIL_TEST);
+			
+//			if(attr.polygonID != 0)
+//			{
+				glStencilFunc(GL_EQUAL, 1, 0x01);
+//				glStencilOp(GL_KEEP, GL_KEEP, GL_KEEP);
+				glStencilOp(GL_KEEP, GL_KEEP, GL_DECR);
+				
+				glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
+				glDepthMask(GL_TRUE);
+//			}
+		}
+	}
+	#endif
 	
 	
 	template <u32 RENDER_MAGNIFICATION>
@@ -4211,34 +4721,36 @@ namespace X432R
 	}
 	
 	
+	#if !defined(_MSC_VER) || (_MSC_VER < 1700) || ( !defined(X432R_PPL_TEST) && !defined(X432R_CPP_AMP_TEST) )
 	template <u32 RENDER_MAGNIFICATION>
-	void OpenGLRenderer_X432::DownscaleFramebuffer(const u32 *source_buffer)
+	void OpenGLRenderer_X432::DownscaleFramebuffer(const u32 * const sourcebuffer_begin)
 	{
-		u32 *highreso_buffer = backBuffer.GetHighResolution3DBuffer();
-		const u32 * const sourcebuffer_begin = source_buffer;
-		u32 * const gfx3d_buffer_begin = (u32 *)gfx3d_convertedScreen;
-		u32 *gfx3d_buffer;
+		u32 * const highresobuffer_begin = backBuffer.GetHighResolution3DBuffer();
+		u32 *highreso_buffer = highresobuffer_begin;
+		u32 * const gfx3d_buffer = (u32 *)gfx3d_convertedScreen;
+		const u32 *source_buffer;
 		
-		u32 remainder_x, remainder_y;
-		u32 downscaled_y;
-//		u32 downscaled_index;
+		u32 x, y, remainder_x, remainder_y, downscaled_index;
+		RGBA8888 color_rgba8888, color_tiletopleft, color_tiletopright, color_tilebottomleft;
+		u32 tiletop_index, tilebottom_index, tileleft_x;
+		u32 r, g, b, a;
 		
-		RGBA8888 color_rgba8888;
-		u16 color_rgb555;
 		
-		u32 x, y;
+		#ifdef X432R_PROCESSTIME_CHECK
+		AutoStopTimeCounter timecounter(timeCounter_3DFinish1);
+		#endif
+		
 		
 		for( y = 0; y < (192 * RENDER_MAGNIFICATION); ++y )
 		{
-			remainder_y = (y % RENDER_MAGNIFICATION) << 16;
-			downscaled_y = (y / RENDER_MAGNIFICATION) * 256;
+			remainder_y = (y % RENDER_MAGNIFICATION);
+			downscaled_index = (y / RENDER_MAGNIFICATION) * 256;
 			
-			source_buffer = sourcebuffer_begin + ( ( ( (192 * RENDER_MAGNIFICATION) - 1 ) - y ) * (256 * RENDER_MAGNIFICATION) );
+			source_buffer = sourcebuffer_begin + ( ( ( (192 * RENDER_MAGNIFICATION) - 1 ) - y ) * (256 * RENDER_MAGNIFICATION) );		// Y²‚ğ”½“]
 			
 			for( x = 0; x < (256 * RENDER_MAGNIFICATION); ++x, ++source_buffer, ++highreso_buffer )
 			{
 				remainder_x = (x % RENDER_MAGNIFICATION);
-//				downscaled_index = downscaled_y + (x / RENDER_MAGNIFICATION);
 				
 				color_rgba8888 = *source_buffer;
 				
@@ -4247,98 +4759,263 @@ namespace X432R
 				
 				*highreso_buffer = color_rgba8888.Color;
 				
-				gfx3d_buffer = gfx3d_buffer_begin + downscaled_y + (x / RENDER_MAGNIFICATION);
+				// Bilinear
+				if( ( remainder_x != (RENDER_MAGNIFICATION - 1) ) || ( remainder_y != (RENDER_MAGNIFICATION - 1) ) ) continue;
 				
-				// å¤‰å‰‡NearestNeighborï¼ˆä¸­å¿ƒç‚¹ãŒé€æ˜ã ã£ãŸå ´åˆã€å·¦ä¸Šã€å³ä¸Šã€å·¦ä¸‹ã€å³ä¸‹ã®ä¸­ã§ä¸é€æ˜ã®ç‚¹ã‚’æ¡ç”¨ã™ã‚‹ï¼‰
-				if( (RENDER_MAGNIFICATION == 2) || ( remainder_y != (1 << 16) ) || (remainder_x != 1) )
-				{
-					switch(remainder_y | remainder_x)
-					{
-						case 0:												// remainder_x == 0, remainder_y == 0
-							*gfx3d_buffer = color_rgba8888.Color;			// gfx3d_ConvertedScreenå†…ã®ãƒ”ã‚¯ã‚»ãƒ«ãƒ•ã‚©ãƒ¼ãƒãƒƒãƒˆã¯RGBA6665ã ãŒã€ä¸€æ™‚çš„ã«RGBA8888ã®ã¾ã¾å€¤ã‚’ä¿å­˜
-							break;
-						
-						case (RENDER_MAGNIFICATION - 1):
-						case ( (RENDER_MAGNIFICATION - 1) << 16 ):
-							if( (*gfx3d_buffer > 0) || (color_rgba8888.A == 0) ) break;
-							
-							*gfx3d_buffer = color_rgba8888.Color;
-							break;
-						
-						case ( ( (RENDER_MAGNIFICATION - 1) << 16 ) | (RENDER_MAGNIFICATION - 1) ):
-							if( ( (RENDER_MAGNIFICATION == 2) && (color_rgba8888.A == 0) ) || (*gfx3d_buffer > 0) )
-								color_rgba8888 = *gfx3d_buffer;
-							
-//							if( (color_rgba8888.A > 0xF0) && (color_rgba8888.A < 0xFF) )
-//								color_rgba8888.A = 0xFF;
-							
-							#ifdef WORDS_BIGENDIAN
-							*gfx3d_buffer = BGRA8888_32_To_RGBA6665_32(color_rgba8888.Color);
-							#else
-							*gfx3d_buffer = BGRA8888_32Rev_To_RGBA6665_32Rev(color_rgba8888.Color);	// ãƒ”ã‚¯ã‚»ãƒ«ãƒ•ã‚©ãƒ¼ãƒãƒƒãƒˆã‚’RGBA6665ã«å¤‰æ›ã—ã¦å€¤ã‚’ä¿å­˜
-							#endif
-							break;
-						
-						default:
-							break;
-					}
-					
-					continue;
-				}
+				tiletop_index = ( y - (RENDER_MAGNIFICATION - 1) ) * (256 * RENDER_MAGNIFICATION);
+				tilebottom_index = y * (256 * RENDER_MAGNIFICATION);
+				tileleft_x = x - (RENDER_MAGNIFICATION - 1);
 				
-				if(color_rgba8888.A > 0)		// (remainder_x == 1, remainder_y == 1)ï¼šç°¡æ˜“ä¸­å¿ƒç‚¹åˆ¤å®šï¼ˆx2:2ç”»ç´ ã®å³å´, x3:3ç”»ç´ ã®ä¸­å¤®, x4:4ç”»ç´ ã®å·¦ã‹ã‚‰2ã¤ã‚ã‚’ä¸­å¿ƒç‚¹ã¨è¦‹ãªã™ï¼‰
-					*gfx3d_buffer = color_rgba8888.Color;
+				color_tiletopleft = highresobuffer_begin[tiletop_index + tileleft_x];
+				color_tiletopright = highresobuffer_begin[tiletop_index + x];
+				color_tilebottomleft = highresobuffer_begin[tilebottom_index + tileleft_x];
 				
-/*				#if 1
-				gfx3d_buffer = gfx3d_buffer_begin + downscaled_index;
+				r = color_tiletopleft.R + color_tiletopright.R + color_tilebottomleft.R + color_rgba8888.R;
+				g = color_tiletopleft.G + color_tiletopright.G + color_tilebottomleft.G + color_rgba8888.G;
+				b = color_tiletopleft.B + color_tiletopright.B + color_tilebottomleft.B + color_rgba8888.B;
+				a = color_tiletopleft.A + color_tiletopright.A + color_tilebottomleft.A + color_rgba8888.A;
 				
-				// å¤‰å‰‡NearestNeighborï¼ˆä¸­å¿ƒç‚¹ãŒé€æ˜ã ã£ãŸå ´åˆã€å·¦ä¸Šã€å³ä¸Šã€å·¦ä¸‹ã€å³ä¸‹ã®ä¸­ã§ä¸é€æ˜ã®ç‚¹ã‚’æ¡ç”¨ã™ã‚‹ï¼‰
-				#if 0
-				if( (remainder_x == 0) && (remainder_y == 0) )
-				{
-					*gfx3d_buffer = color_rgba8888.Color;		// gfx3d_ConvertedScreenå†…ã®ãƒ”ã‚¯ã‚»ãƒ«ãƒ•ã‚©ãƒ¼ãƒãƒƒãƒˆã¯RGBA6665ã ãŒã€ä¸€æ™‚çš„ã«RGBA8888ã®ã¾ã¾å€¤ã‚’ä¿å­˜
-					continue;
-				}
-				
-				if( (remainder_x == 1) && (remainder_y == 1) && (color_rgba8888.A > 0) )	// ç°¡æ˜“ä¸­å¿ƒç‚¹åˆ¤å®šï¼ˆx2:2ç”»ç´ ã®å³å´, x3:3ç”»ç´ ã®ä¸­å¤®, x4:4ç”»ç´ ã®å·¦ã‹ã‚‰2ã¤ã‚ã‚’ä¸­å¿ƒç‚¹ã¨è¦‹ãªã™ï¼‰
-					*gfx3d_buffer = color_rgba8888.Color;
-				
-				if( ( (remainder_x != 0) && ( remainder_x != (RENDER_MAGNIFICATION - 1) ) ) || ( (remainder_y != 0) && ( remainder_y != (RENDER_MAGNIFICATION - 1) ) ) ) continue;
-				
-				if( (*gfx3d_buffer == 0) && (color_rgba8888.A > 0) )
-					*gfx3d_buffer = color_rgba8888.Color;
-				
-				if( ( remainder_x == (RENDER_MAGNIFICATION - 1) ) && ( remainder_y == (RENDER_MAGNIFICATION - 1) ) )
-				{
-					color_rgba8888 = *gfx3d_buffer;
-					
-					if( (color_rgba8888.A > 0xF0) && (color_rgba8888.A < 0xFF) )
-						color_rgba8888.A = 0xFF;
-					
-					#ifdef WORDS_BIGENDIAN
-					*gfx3d_buffer = BGRA8888_32_To_RGBA6665_32(color_rgba8888.Color);
-					#else
-					*gfx3d_buffer = BGRA8888_32Rev_To_RGBA6665_32Rev(color_rgba8888.Color);	// ãƒ”ã‚¯ã‚»ãƒ«ãƒ•ã‚©ãƒ¼ãƒãƒƒãƒˆã‚’RGBA6665ã«å¤‰æ›ã—ã¦å€¤ã‚’ä¿å­˜
-					#endif
-				}
-				#else
-				// ç°¡æ˜“NearestNeighborï¼ˆx2:2ç”»ç´ ã®å³å´, x3:3ç”»ç´ ã®ä¸­å¤®, x4:4ç”»ç´ ã®å·¦ã‹ã‚‰2ã¤ã‚ã‚’ä¸­å¿ƒç‚¹ã¨è¦‹ãªã™ï¼‰
-				if( (remainder_x != 1) && (remainder_y != 1) ) continue;
-				
-				if( (color_rgba8888.A > 0xF0) && (color_rgba8888.A < 0xFF) )
-					color_rgba8888.A = 0xFF;
+				color_rgba8888.R = (u8)std::min<u32>(r / 4, 0xFF);
+				color_rgba8888.G = (u8)std::min<u32>(g / 4, 0xFF);
+				color_rgba8888.B = (u8)std::min<u32>(b / 4, 0xFF);
+				color_rgba8888.A = (u8)std::min<u32>(a / 4, 0xFF);
 				
 				#ifdef WORDS_BIGENDIAN
-				gfx3d_buffer[downscaled_index] = BGRA8888_32_To_RGBA6665_32(color_rgba8888.Color);
+				gfx3d_buffer[ downscaled_index + (x / RENDER_MAGNIFICATION) ] = BGRA8888_32_To_RGBA6665_32(color_rgba8888.Color);
 				#else
-				gfx3d_buffer[downscaled_index] = BGRA8888_32Rev_To_RGBA6665_32Rev(color_rgba8888.Color);
+				gfx3d_buffer[ downscaled_index + (x / RENDER_MAGNIFICATION) ] = BGRA8888_32Rev_To_RGBA6665_32Rev(color_rgba8888.Color);		// ƒsƒNƒZƒ‹ƒtƒH[ƒ}ƒbƒg‚ğRGBA6665‚É•ÏŠ·‚µ‚Ä’l‚ğ•Û‘¶
 				#endif
-				#endif
-*/				
 			}
 		}
 	}
+	#elif defined(X432R_PPL_TEST)
+	template <u32 RENDER_MAGNIFICATION>
+	void OpenGLRenderer_X432::DownscaleFramebuffer(const u32 * const sourcebuffer_begin)
+	{
+		u32 * const highresobuffer_begin = backBuffer.GetHighResolution3DBuffer();
+		u32 * const gfx3d_buffer = (u32 *)gfx3d_convertedScreen;
+		
+		
+		#ifdef X432R_PROCESSTIME_CHECK
+		AutoStopTimeCounter timecounter(timeCounter_3DFinish1);
+		#endif
+		
+		
+		concurrency::parallel_for( (u32)0, RENDER_MAGNIFICATION, [&](const u32 offset)
+		{
+			const u32 y_begin = 192 * offset;
+			const u32 y_end = y_begin + 192;
+			
+			u32 *highreso_buffer = highresobuffer_begin + (y_begin * 256 * RENDER_MAGNIFICATION);
+			const u32 *source_buffer;
+			
+			u32 x, y, remainder_x, remainder_y, downscaled_index;
+			RGBA8888 color_rgba8888, color_tiletopleft, color_tiletopright, color_tilebottomleft;
+			u32 tiletop_index, tilebottom_index, tileleft_x;
+			u32 r, g, b, a;
+			
+			for(y = y_begin; y < y_end; ++y)
+			{
+				remainder_y = (y % RENDER_MAGNIFICATION);
+				downscaled_index = (y / RENDER_MAGNIFICATION) * 256;
+				
+				source_buffer = sourcebuffer_begin + ( ( ( (192 * RENDER_MAGNIFICATION) - 1 ) - y ) * (256 * RENDER_MAGNIFICATION) );		// Y²‚ğ”½“]
+				
+				for( x = 0; x < (256 * RENDER_MAGNIFICATION); ++x, ++source_buffer, ++highreso_buffer )
+				{
+					remainder_x = (x % RENDER_MAGNIFICATION);
+					
+					color_rgba8888 = *source_buffer;
+					
+					if(color_rgba8888.A == 0)
+						color_rgba8888 = 0;
+					
+					*highreso_buffer = color_rgba8888.Color;
+					
+					// Bilinear
+					if( ( remainder_x != (RENDER_MAGNIFICATION - 1) ) || ( remainder_y != (RENDER_MAGNIFICATION - 1) ) ) continue;
+					
+					tiletop_index = ( y - (RENDER_MAGNIFICATION - 1) ) * (256 * RENDER_MAGNIFICATION);
+					tilebottom_index = y * (256 * RENDER_MAGNIFICATION);
+					tileleft_x = x - (RENDER_MAGNIFICATION - 1);
+					
+					color_tiletopleft = highresobuffer_begin[tiletop_index + tileleft_x];
+					color_tiletopright = highresobuffer_begin[tiletop_index + x];
+					color_tilebottomleft = highresobuffer_begin[tilebottom_index + tileleft_x];
+					
+					r = color_tiletopleft.R + color_tiletopright.R + color_tilebottomleft.R + color_rgba8888.R;
+					g = color_tiletopleft.G + color_tiletopright.G + color_tilebottomleft.G + color_rgba8888.G;
+					b = color_tiletopleft.B + color_tiletopright.B + color_tilebottomleft.B + color_rgba8888.B;
+					a = color_tiletopleft.A + color_tiletopright.A + color_tilebottomleft.A + color_rgba8888.A;
+					
+					color_rgba8888.R = (u8)std::min<u32>(r / 4, 0xFF);
+					color_rgba8888.G = (u8)std::min<u32>(g / 4, 0xFF);
+					color_rgba8888.B = (u8)std::min<u32>(b / 4, 0xFF);
+					color_rgba8888.A = (u8)std::min<u32>(a / 4, 0xFF);
+					
+					#ifdef WORDS_BIGENDIAN
+					gfx3d_buffer[ downscaled_index + (x / RENDER_MAGNIFICATION) ] = BGRA8888_32_To_RGBA6665_32(color_rgba8888.Color);
+					#else
+					gfx3d_buffer[ downscaled_index + (x / RENDER_MAGNIFICATION) ] = BGRA8888_32Rev_To_RGBA6665_32Rev(color_rgba8888.Color);		// ƒsƒNƒZƒ‹ƒtƒH[ƒ}ƒbƒg‚ğRGBA6665‚É•ÏŠ·‚µ‚Ä’l‚ğ•Û‘¶
+					#endif
+				}
+			}
+		});
+	}
+	#else
+	static concurrency::array<u32, 2> ampTestBuffer1(768, 1024);
+	static concurrency::array<u32, 2> ampTestBuffer2(768, 1024);
+	static concurrency::array<u32, 2> ampTestBuffer3(192, 256);
 	
+	template <u32 RENDER_MAGNIFICATION>
+	void OpenGLRenderer_X432::DownscaleFramebuffer(const u32 *source_buffer)
+	{
+		#ifdef X432R_PROCESSTIME_CHECK
+		AutoStopTimeCounter timecounter(timeCounter_3DFinish1);
+		#endif
+		
+		const concurrency::array_view<u32, 2> highreso_buffer = ampTestBuffer1.section(0, 0, 192 * RENDER_MAGNIFICATION, 256 * RENDER_MAGNIFICATION);
+		const concurrency::array_view<u32, 2> highreso_buffer2( 192 * RENDER_MAGNIFICATION, 256 * RENDER_MAGNIFICATION, backBuffer.GetHighResolution3DBuffer() );
+		
+		const concurrency::array_view<u32, 2> source_buffer2 = ampTestBuffer2.section(0, 0, 192 * RENDER_MAGNIFICATION, 256 * RENDER_MAGNIFICATION);
+		const concurrency::array_view<u32, 2> downscaled_buffer = ampTestBuffer3.section(0, 0, 192, 256);
+		
+		const concurrency::array_view<u32, 2> source_buffer3( 192 * RENDER_MAGNIFICATION, 256 * RENDER_MAGNIFICATION, (u32 *)source_buffer );
+		const concurrency::array_view<u32, 2> downscaled_buffer2( 192, 256, (u32 *)gfx3d_convertedScreen );
+		
+		source_buffer3.copy_to(source_buffer2);
+		
+/*		const concurrency::array_view<u32, 2> highreso_buffer( 192 * RENDER_MAGNIFICATION, 256 * RENDER_MAGNIFICATION, backBuffer.GetHighResolution3DBuffer() );
+		const concurrency::array_view<const u32, 2> source_buffer2(192 * RENDER_MAGNIFICATION, 256 * RENDER_MAGNIFICATION, source_buffer);
+		const concurrency::array_view<u32, 2> downscaled_buffer( 192, 256, (u32 *)gfx3d_convertedScreen );
+*/		
+		
+		highreso_buffer.discard_data();		// ƒoƒbƒtƒ@‚ğ‘‚«‚İê—p‚Éİ’è
+		downscaled_buffer.discard_data();
+		
+		concurrency::parallel_for_each
+		(
+			highreso_buffer.extent.tile<RENDER_MAGNIFICATION, RENDER_MAGNIFICATION>(),
+			[=](concurrency::tiled_index<RENDER_MAGNIFICATION, RENDER_MAGNIFICATION> index) restrict(amp)
+			{
+				u32 source_color = source_buffer2[index.global];
+				
+				highreso_buffer[ ( (192 * RENDER_MAGNIFICATION) - 1 ) - index.global[0] ][ index.global[1] ] = source_color;
+				
+				
+				// Bilineark¬ˆ—
+				tile_static u32 colors[4];
+				const u32 combined_index = ( index.local[0] << 16 ) | index.local[1];
+				
+				switch(combined_index)
+				{
+					case 0:
+						colors[0] = source_color;
+						break;
+					
+					case (RENDER_MAGNIFICATION - 1):
+						colors[1] = source_color;
+						break;
+					
+					case ( (RENDER_MAGNIFICATION - 1) << 16 ):
+						colors[2] = source_color;
+						break;
+					
+					case ( ( (RENDER_MAGNIFICATION - 1) << 16 ) | (RENDER_MAGNIFICATION - 1) ):
+						colors[3] = source_color;
+						break;
+				}
+				
+				index.barrier.wait();				// ˆ—”ÍˆÍ‚Ìƒf[ƒ^’Šo‚ªI‚í‚é‚Ì‚ğ‘Ò‚Â
+				
+				if(combined_index != 0) return;
+				
+				u32 a = 0;
+				u32 r = 0;
+				u32 g = 0;
+				u32 b = 0;
+				
+				for each(u32 color in colors)
+				{
+					a += color >> 24;
+					r += (color >> 16) & 0xFF;
+					g += (color >> 8) & 0xFF;
+					b += color & 0xFF;
+				}
+				
+				// RGBA8888 ¨ RGBA6665
+				a >>= 5;		// (a / 4) >> 3
+				r >>= 4;		// (a / 4) >> 2
+				g >>= 4;
+				b >>= 4;
+				
+				downscaled_buffer[ 191 - index.tile[0] ][ index.tile[1] ] = (a << 24) | (b << 16) | (g << 8) | r;
+			}
+		);
+		
+/*		highreso_buffer.synchronize();
+		downscaled_buffer.synchronize();
+*/		
+/*		highreso_buffer.synchronize_async();
+		downscaled_buffer.synchronize_async();
+*/		
+		downscaled_buffer.copy_to(downscaled_buffer2);
+		highreso_buffer.copy_to(highreso_buffer2);
+	}
+	#endif
+	
+	
+	#if 1
+	template <u32 RENDER_MAGNIFICATION>
+	Render3DError OpenGLRenderer_X432::RenderFinish()
+	{
+		const unsigned int i = this->doubleBufferIndex;
+		
+		if( !this->gpuScreen3DHasNewData[i] )
+			return OGLERROR_NOERR;
+		
+		
+		// PBO + glMapBuffer
+		#ifdef X432R_PROCESSTIME_CHECK
+		timeCounter_3DFinish2.Start();
+		#endif
+		
+//		glBindBuffer( GL_PIXEL_PACK_BUFFER, this->ref->pboRenderDataID[i] );
+//		const u32 * const mapped_buffer = (u32 *)glMapBuffer(GL_PIXEL_PACK_BUFFER, GL_READ_ONLY);
+		glBindBuffer( GL_PIXEL_UNPACK_BUFFER, this->ref->pboRenderDataID[i] );
+		const u32 * const mapped_buffer = (u32 *)glMapBuffer(GL_PIXEL_UNPACK_BUFFER, GL_READ_ONLY);
+		
+		#ifdef X432R_PROCESSTIME_CHECK
+		timeCounter_3DFinish2.Stop();
+		#endif
+		
+		if(mapped_buffer != NULL)
+			DownscaleFramebuffer<RENDER_MAGNIFICATION>(mapped_buffer);
+		
+//		glUnmapBuffer(GL_PIXEL_PACK_BUFFER);
+//		glBindBuffer(GL_PIXEL_PACK_BUFFER, 0);
+		glUnmapBuffer(GL_PIXEL_UNPACK_BUFFER);
+		glBindBuffer(GL_PIXEL_UNPACK_BUFFER, 0);
+		
+		
+		glBindFramebufferEXT(GL_FRAMEBUFFER_EXT, 0);
+		
+		this->gpuScreen3DHasNewData[i] = false;
+		
+		
+		#ifdef X432R_CUSTOMRENDERER_DEBUG
+		if(glFogEnabled && gfx3d.renderState.enableFogAlphaOnly)
+			X432R::ShowDebugMessage("OpenGL FogAlphaOnly");
+		
+//		if(gfx3d.renderState.wbuffer)
+//			ShowDebugMessage("OpenGL Depth: W-value");
+		#endif
+		
+		
+		return OGLERROR_NOERR;
+	}
+	#else
+	static u32 temp3DBuffer[1024 * 768];
 	
 	template <u32 RENDER_MAGNIFICATION>
 	Render3DError OpenGLRenderer_X432::RenderFinish()
@@ -4349,29 +5026,29 @@ namespace X432R
 			return OGLERROR_NOERR;
 		
 		
+		// PBO + glGetBufferSubData
 		#ifdef X432R_PROCESSTIME_CHECK
-		AutoStopTimeCounter timecounter(timeCounter_3DFinish);
+		timeCounter_3DFinish2.Start();
 		#endif
 		
+//		glBindBuffer( GL_PIXEL_PACK_BUFFER, this->ref->pboRenderDataID[i] );
+		glBindBuffer( GL_PIXEL_UNPACK_BUFFER, this->ref->pboRenderDataID[i] );
 		
-//		glBindBuffer(GL_PIXEL_PACK_BUFFER, this->ref->pboRenderDataID[i]);
-		glBindBuffer(GL_PIXEL_UNPACK_BUFFER, this->ref->pboRenderDataID[i]);
+		static const u32 buffer_size = sizeof(u32) * 256 * 192 * RENDER_MAGNIFICATION * RENDER_MAGNIFICATION;
 		
-//		const u32 * const mapped_buffer = (u32 *)glMapBuffer(GL_PIXEL_PACK_BUFFER, GL_READ_ONLY);
-		const u32 * const mapped_buffer = (u32 *)glMapBuffer(GL_PIXEL_UNPACK_BUFFER, GL_READ_ONLY);
+		glGetBufferSubData(GL_PIXEL_UNPACK_BUFFER, 0, buffer_size, temp3DBuffer);
 		
-		if(mapped_buffer != NULL)
-		{
-			DownscaleFramebuffer<RENDER_MAGNIFICATION>(mapped_buffer);
-			
-//			glUnmapBuffer(GL_PIXEL_PACK_BUFFER);
-			glUnmapBuffer(GL_PIXEL_UNPACK_BUFFER);
-		}
+		#ifdef X432R_PROCESSTIME_CHECK
+		timeCounter_3DFinish2.Stop();
+		#endif
+		
+		DownscaleFramebuffer<RENDER_MAGNIFICATION>(temp3DBuffer);
 		
 //		glBindBuffer(GL_PIXEL_PACK_BUFFER, 0);
 		glBindBuffer(GL_PIXEL_UNPACK_BUFFER, 0);
 		
 		glBindFramebufferEXT(GL_FRAMEBUFFER_EXT, 0);
+		
 		
 		this->gpuScreen3DHasNewData[i] = false;
 		
@@ -4379,12 +5056,15 @@ namespace X432R
 		#ifdef X432R_CUSTOMRENDERER_DEBUG
 		if(glFogEnabled && gfx3d.renderState.enableFogAlphaOnly)
 			X432R::ShowDebugMessage("OpenGL FogAlphaOnly");
+		
+//		if(gfx3d.renderState.wbuffer)
+//			ShowDebugMessage("OpenGL Depth: W-value");
 		#endif
 		
 		
 		return OGLERROR_NOERR;
 	}
-	
+	#endif
 	
 	#ifdef X432R_OPENGL_FOG_ENABLED
 	// Vertex Shader GLSL 1.00
@@ -4419,15 +5099,6 @@ namespace X432R
 			\n\
 			gl_Position = vtxPosition; \n\
 			\n\
-			float z; \n\
-			if(oglWBuffer == 1) \n\
-			{ \n\
-				z = vtxPosition.w / 4096.0; \n\
-			} \n\
-			else \n\
-			{ \n\
-				z = ( (vtxPosition.z / vtxPosition.w) * 0.5 ) + 0.5; \n\
-			} \n\
 			\n\
 			if(fogEnabled == 0) \n\
 			{ \n\
@@ -4435,6 +5106,16 @@ namespace X432R
 			} \n\
 			else \n\
 			{ \n\
+				float z; \n\
+				if(oglWBuffer == 1) \n\
+				{ \n\
+					z = vtxPosition.w / 4096.0; \n\
+				} \n\
+				else \n\
+				{ \n\
+//					z = ( (vtxPosition.z / vtxPosition.w) * 0.5 ) + 0.5; \n\
+					z = ( vtxPosition.z / (vtxPosition.w * 2.0) ) + 0.5; \n\
+				} \n\
 				\n\
 				if(z <= fogOffset) \n\
 				{ \n\
@@ -4492,24 +5173,24 @@ namespace X432R
 			} \n\
 			else if(polygonMode == 1) \n\
 			{ \n\
-				if (texColor.a == 0.0 || !hasTexture) \n\
+				if( (texColor.a == 0.0) || !hasTexture ) \n\
 				{ \n\
 					fragColor.rgb = vtxColor.rgb; \n\
 				} \n\
-				else if (texColor.a == 1.0) \n\
+				else if(texColor.a == 1.0) \n\
 				{ \n\
 					fragColor.rgb = texColor.rgb; \n\
 				} \n\
 				else \n\
 				{ \n\
-					fragColor.rgb = texColor.rgb * (1.0-texColor.a) + vtxColor.rgb * texColor.a;\n\
+					fragColor.rgb = (texColor.rgb * texColor.a) + ( vtxColor.rgb * (1.0 - texColor.a) ); \n\
 				} \n\
 				\n\
 				fragColor.a = vtxColor.a; \n\
 			} \n\
 			else if(polygonMode == 2) \n\
 			{ \n\
-				if (toonShadingMode == 0) \n\
+				if(toonShadingMode == 0) \n\
 				{ \n\
 					vec3 toonColor = vec3(texture1D(texToonTable, vtxColor.r).rgb); \n\
 					fragColor.rgb = texColor.rgb * toonColor.rgb;\n\
@@ -4524,13 +5205,13 @@ namespace X432R
 			} \n\
 			else if(polygonMode == 3) \n\
 			{ \n\
-				if (polyID != 0) \n\
+				if(polyID != 0) \n\
 				{ \n\
 					fragColor = vtxColor; \n\
 				} \n\
 			} \n\
 			\n\
-			if (fragColor.a == 0.0 || (enableAlphaTest && fragColor.a < alphaTestRef)) \n\
+			if( (fragColor.a == 0.0) || ( enableAlphaTest && (fragColor.a < alphaTestRef) ) ) \n\
 			{ \n\
 				discard; \n\
 			} \n\
@@ -4539,11 +5220,13 @@ namespace X432R
 			{ \n\
 				// The w component is in 1.12 format, normalize it to [-1;+1] \n\
 //				gl_FragDepth = ( (vtxPosition.w / 4096.0) * 0.5 ) + 0.5; \n\
-				gl_FragDepth = (vtxPosition.w / 8192.0) + 0.5; \n\
+//				gl_FragDepth = (vtxPosition.w / 8192.0) + 0.5; \n\
+				gl_FragDepth = vtxPosition.w / 4096.0; \n\
 			} \n\
 			else \n\
 			{ \n\
-				gl_FragDepth = ( (vtxPosition.z / vtxPosition.w) * 0.5 ) + 0.5; \n\
+//				gl_FragDepth = ( (vtxPosition.z / vtxPosition.w) * 0.5 ) + 0.5; \n\
+				gl_FragDepth = ( vtxPosition.z / (vtxPosition.w * 2.0) ) + 0.5; \n\
 			} \n\
 			\n\
 			if(fogFactor >= 1.0) \n\
@@ -4552,33 +5235,18 @@ namespace X432R
 			} \n\
 /*			else if(fogAlphaOnly == 1) \n\
 			{ \n\
-				gl_FragColor.r = fragColor.r; \n\
-				gl_FragColor.g = fragColor.g; \n\
-				gl_FragColor.b = fragColor.b; \n\
+				gl_FragColor.rgb = fragColor.rgb; \n\
 				gl_FragColor.a = mix(gl_Fog.color.a, fragColor.a, fogFactor); \n\
 			} \n\
 */			else \n\
 			{ \n\
 //				gl_FragColor = mix(gl_Fog.color, fragColor, fogFactor); \n\
-				gl_FragColor.r = mix(gl_Fog.color.r, fragColor.r, fogFactor); \n\
-				gl_FragColor.g = mix(gl_Fog.color.g, fragColor.g, fogFactor); \n\
-				gl_FragColor.b = mix(gl_Fog.color.b, fragColor.b, fogFactor); \n\
+				gl_FragColor.rgb = mix(gl_Fog.color.rgb, fragColor.rgb, fogFactor); \n\
 				gl_FragColor.a = fragColor.a; \n\
 			} \n\
 		} \n\
 	"};
-	
-/*	Render3DError OpenGLRenderer_X432::LoadShaderPrograms(std::string *outVertexShaderProgram, std::string *outFragmentShaderProgram)
-	{
-		outVertexShaderProgram->clear();
-		outFragmentShaderProgram->clear();
-		
-		*outVertexShaderProgram += std::string(vertexShader_X432);
-		*outFragmentShaderProgram += std::string(fragmentShader_X432);
-	
-		return OGLERROR_NOERR;
-	}
-*/	#endif
+	#endif
 	
 	
 	template <u32 RENDER_MAGNIFICATION>
@@ -4600,12 +5268,14 @@ namespace X432R
 		std::string vertexShaderProgram;
 		std::string fragmentShaderProgram;
 		
+		
 		#ifndef X432R_OPENGL_FOG_ENABLED
 		error = this->LoadShaderPrograms(&vertexShaderProgram, &fragmentShaderProgram);
 		#else
 		vertexShaderProgram = vertexShader_X432;
 		fragmentShaderProgram = fragmentShader_X432;
 		#endif
+		
 		
 /*		if(error != OGLERROR_NOERR)
 		{
@@ -4620,6 +5290,7 @@ namespace X432R
 			this->isShaderSupported = false;
 			return error;
 		}
+		
 		
 		#ifdef X432R_OPENGL_FOG_ENABLED
 		uniformFogEnabled = glGetUniformLocation(OGLRef.shaderProgram, "fogEnabled");
@@ -4718,6 +5389,15 @@ namespace X432R
 		this->InitTextures();
 		this->InitFinalRenderStates(&oglExtensionSet); // This must be done last
 		
+		
+		if( !isMultisampledFBOSupported )
+		{
+			CommonSettings.GFX3D_Renderer_Multisample = false;
+			#ifdef X432R_LOWQUALITYMODE_TEST
+			lowQualityMsaaEnabled = false;
+			#endif
+		}
+		
 		return OGLERROR_NOERR;
 	}
 	
@@ -4755,6 +5435,5 @@ namespace X432R
 		OGLVramReconfigureSignal
 	};
 }
-
 
 #endif
