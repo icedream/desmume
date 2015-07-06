@@ -22,6 +22,12 @@
 #include "../types.h"
 #include "windriver.h"
 
+
+//---CUSTOM--->
+#include "X432R_BuildSwitch.h"
+//<---CUSTOM---
+
+
 int SNDXA2Init(int buffersize);
 void SNDXA2DeInit();
 void PushBuffer(u8 *pAudioData,u32 AudioBytes);
@@ -89,6 +95,11 @@ DWORD WINAPI SNDXA2Thread( LPVOID )
 			SPU_Emulate_user();
 		}
 		WaitForSingleObject(bufferReadyEvent,1000);
+		
+		#ifdef X432R_MENUITEMMOD_ENABLED
+		if(X432R::cpuPowerSavingEnabled)
+			Sleep(1);	// WaitForSingleObject()‚ÍCPUŽg—p—¦‚ð‰º‚°‚é–ð‚É‚Í—§‚½‚È‚¢‚Ì‚ÅSleep()‚ðŽÀs‚µ‚Ä‚µ‚Ü‚¤
+		#endif
 	}
 	SetEvent(threadQuitEvent);
 	return 0;

@@ -21,6 +21,12 @@
 #include "render3D.h"
 #include "gfx3d.h"
 
+
+//---CUSTOM--->
+#include "X432R_BuildSwitch.h"
+//<---CUSTOM---
+
+
 extern GPU3DInterface gpu3DRasterize;
 
 union FragmentColor {
@@ -90,7 +96,34 @@ public:
 	VERTLIST* vertlist;
 	INDEXLIST* indexlist;
 	int width, height;
+	
+	
+	#ifdef X432R_CUSTOMSOFTRASTENGINE_ENABLED
+	#ifndef X432R_SOFTRAST_OPTIMIZE_TEST
+	template <bool CUSTOM>
+	void ProcessClippedPolygons(const u32 width, const u32 height);
+	
+	template <u32 RENDER_MAGNIFICATION>
+	void InitFramebuffer(const u32 width, const u32 height, const bool clear_image);
+	#else
+	template <u32 RENDER_MAGNIFICATION>
+	void ProcessClippedPolygons();
+	
+	template <u32 RENDER_MAGNIFICATION>
+	void InitFramebuffer(const bool clear_image);
+	#endif
+	#endif
 };
+
+
+#ifdef X432R_CUSTOMRENDERER_ENABLED
+namespace X432R
+{
+	extern GPU3DInterface gpu3DRasterize_X2;
+	extern GPU3DInterface gpu3DRasterize_X3;
+	extern GPU3DInterface gpu3DRasterize_X4;
+}
+#endif
 
 
 #endif

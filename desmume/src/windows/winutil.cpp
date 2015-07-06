@@ -25,6 +25,11 @@
 #include <ShlObj.h>
 
 
+//---CUSTOM--->
+#include "X432R_BuildSwitch.h"
+//<---CUSTOM---
+
+
 char IniName[MAX_PATH];
 
 char* _hack_alternateModulePath;
@@ -33,8 +38,8 @@ char* _hack_alternateModulePath;
 static char vPath[MAX_PATH*2], *szPath;
 
 void GetINIPath()
-{   
-
+{
+	#ifndef X432R_FILEPATHMOD_ENABLED
 	bool useModulePath = true;
 
 	//check if desmume is running from the temp directory.
@@ -87,6 +92,41 @@ void GetINIPath()
 	}
 
 	FCEUD_MakePathDirs(IniName);
+	#else
+	std::string path, filename;
+	
+	{
+		char buffer_fullpath[MAX_PATH] = {0};
+		char buffer_filename[MAX_PATH] = {0};
+		char buffer_driveletter[MAX_PATH] = {0};
+		char buffer_directorypath[MAX_PATH] = {0};
+		
+		GetModuleFileName( NULL, buffer_filename, sizeof(buffer_filename) );								// exeのフルパスを取得
+		GetFullPathName( buffer_filename, sizeof(buffer_fullpath), buffer_fullpath, NULL );					// 相対パスが含まれる可能性があるため絶対パスに変換
+		_splitpath(buffer_fullpath, buffer_driveletter, buffer_directorypath, buffer_filename, NULL);		// パスを分割してexeファイル名(拡張子なし)を取得
+		
+		path = (std::string)buffer_driveletter + (std::string)buffer_directorypath;
+		filename = (std::string)buffer_filename + ".ini";
+	}
+	
+	u32 length = filename.length();
+	
+	if( ( path.length() + length ) < MAX_PATH )
+		path += filename;
+	
+	else if( ( strlen(".\\") + length ) < MAX_PATH )
+		path = ".\\" + filename;
+	
+	else
+		path.clear();
+	
+	memset( IniName, 0, sizeof(IniName) );
+	
+	length = path.length();
+	
+	if(length > 0)
+		strncpy(IniName, path.c_str(), length);
+	#endif
 }
 
 void PreventScreensaver()

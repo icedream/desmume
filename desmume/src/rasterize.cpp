@@ -124,8 +124,13 @@ static FORCEINLINE int fastFloor(float f)
 //	verts[vert_index] = &rawvert;
 //}
 
+#ifndef X432R_CUSTOMRENDERER_ENABLED
 static Fragment _screen[GFX3D_FRAMEBUFFER_WIDTH*GFX3D_FRAMEBUFFER_HEIGHT];
 static FragmentColor _screenColor[GFX3D_FRAMEBUFFER_WIDTH*GFX3D_FRAMEBUFFER_HEIGHT];
+#else
+static Fragment _screen[1024 * 768];
+static FragmentColor _screenColor[1024 * 768];
+#endif
 
 static FORCEINLINE int iround(float f) {
 	return (int)f; //lol
@@ -755,8 +760,17 @@ public:
 	}
 
 	//draws a single scanline
+	#ifndef X432R_SOFTRAST_OPTIMIZE_TEST
 	FORCEINLINE void drawscanline(edge_fx_fl *pLeft, edge_fx_fl *pRight, bool lineHack)
 	{
+	#else
+	template<u32 RENDER_MAGNIFICATION>
+	FORCEINLINE void drawscanline(edge_fx_fl *pLeft, edge_fx_fl *pRight, bool lineHack)
+	{
+		static const u32 ENGINE_WIDTH = 256 * RENDER_MAGNIFICATION;
+		static const u32 ENGINE_HEIGHT = 192 * RENDER_MAGNIFICATION;
+	#endif
+		
 		int XStart = pLeft->X;
 		int width = pRight->X - XStart;
 
@@ -793,10 +807,15 @@ public:
 			(pRight->color[1].curr - color[1]) * invWidth,
 			(pRight->color[2].curr - color[2]) * invWidth };
 
+		#ifndef X432R_SOFTRAST_OPTIMIZE_TEST
 		int adr = (pLeft->Y*engine->width)+XStart;
+		#else
+		int adr = (pLeft->Y * ENGINE_WIDTH) + XStart;
+		#endif
 
 		//CONSIDER: in case some other math is wrong (shouldve been clipped OK), we might go out of bounds here.
 		//better check the Y value.
+		#ifndef X432R_CUSTOMRENDERER_ENABLED
 		if(RENDERER && (pLeft->Y<0 || pLeft->Y>191)) {
 			printf("rasterizer rendering at y=%d! oops!\n",pLeft->Y);
 			return;
@@ -805,6 +824,19 @@ public:
 			printf("rasterizer rendering at y=%d! oops!\n",pLeft->Y);
 			return;
 		}
+		#elif !defined(X432R_SOFTRAST_OPTIMIZE_TEST)
+		if( (pLeft->Y < 0) || (pLeft->Y >= engine->height) )
+		{
+			printf("rasterizer rendering at y=%d! oops!\n", pLeft->Y);
+			return;
+		}
+		#else
+		if( (pLeft->Y < 0) || (pLeft->Y >= ENGINE_HEIGHT) )
+		{
+			printf("rasterizer rendering at y=%d! oops!\n", pLeft->Y);
+			return;
+		}
+		#endif
 
 		int x = XStart;
 
@@ -826,6 +858,8 @@ public:
 			width -= -x;
 			x = 0;
 		}
+		
+		#ifndef X432R_CUSTOMRENDERER_ENABLED
 		if(x+width > (RENDERER?GFX3D_FRAMEBUFFER_WIDTH:engine->width))
 		{
 			if(RENDERER && !lineHack)
@@ -835,6 +869,29 @@ public:
 			}
 			width = (RENDERER?GFX3D_FRAMEBUFFER_WIDTH:engine->width)-x;
 		}
+		#elif !defined(X432R_SOFTRAST_OPTIMIZE_TEST)
+		if( (x + width) > engine->width )
+		{
+			if(RENDERER && !lineHack)
+			{
+				printf("rasterizer rendering at x=%d! oops!\n", x + width - 1);
+				return;
+			}
+			
+			width = engine->width - x;
+		}
+		#else
+		if( (x + width) > ENGINE_WIDTH )
+		{
+			if(RENDERER && !lineHack)
+			{
+				printf("rasterizer rendering at x=%d! oops!\n", x + width - 1);
+				return;
+			}
+			
+			width = ENGINE_WIDTH - x;
+		}
+		#endif
 
 		while(width-- > 0)
 		{
@@ -853,6 +910,7 @@ public:
 	}
 
 	//runs several scanlines, until an edge is finished
+	#ifndef X432R_SOFTRAST_OPTIMIZE_TEST
 	template<bool SLI>
 	void runscanlines(edge_fx_fl *left, edge_fx_fl *right, bool horizontal, bool lineHack)
 	{
@@ -863,7 +921,11 @@ public:
 		bool first=true;
 
 		//HACK: special handling for horizontal line poly
+		#ifndef X432R_CUSTOMRENDERER_ENABLED
 		if (lineHack && left->Height == 0 && right->Height == 0 && left->Y<GFX3D_FRAMEBUFFER_HEIGHT && left->Y>=0)
+		#else
+		if( lineHack && (left->Height == 0) && (right->Height == 0) && (left->Y < engine->height) && (left->Y >= 0) )
+		#endif
 		{
 			bool draw = (!SLI || (left->Y & SLI_MASK) == SLI_VALUE);
 			if(draw) drawscanline(left,right,lineHack);
@@ -933,6 +995,79 @@ public:
 			}
 		}
 	}
+	#else
+	template<bool SLI, u32 RENDER_MAGNIFICATION>
+	void runscanlines(edge_fx_fl *left, edge_fx_fl *right, bool horizontal, bool lineHack)
+	{
+		static const u32 ENGINE_WIDTH = 256 * RENDER_MAGNIFICATION;
+		static const u32 ENGINE_HEIGHT = 192 * RENDER_MAGNIFICATION;
+		
+		bool draw = !SLI || ( (left->Y & SLI_MASK) == SLI_VALUE );
+		
+		
+		//oh lord, hack city for edge drawing
+		
+		//do not overstep either of the edges
+		int height = min(left->Height, right->Height);
+		bool first = true;
+		
+		//HACK: special handling for horizontal line poly
+		if( lineHack && (left->Height == 0) && (right->Height == 0) && (left->Y < ENGINE_HEIGHT) && (left->Y >= 0) && draw )
+			drawscanline<RENDER_MAGNIFICATION>(left, right, lineHack);
+		
+		while(height--)
+		{
+			draw = !SLI || ( (left->Y & SLI_MASK) == SLI_VALUE );
+			
+			if(draw)
+				drawscanline<RENDER_MAGNIFICATION>(left, right, lineHack);
+			
+			left->Step();
+			right->Step();
+			
+/*			if( !RENDERER && _debug_thisPoly )
+			{
+				//debug drawing
+				const bool top = (horizontal && first);
+				const bool bottom = ( !height && horizontal );
+				
+				FragmentColor * const dest_line = engine->screenColor + (left->Y * ENGINE_WIDTH);
+				
+				if( (height || top || bottom) && draw )
+				{
+					const int xl = left->X;
+					const int xr = right->X;
+					
+					#define X432R_DRAW_SOFTRAST_DEBUG_COLOR(begin,end) \
+						for(int x = begin; x <= end; ++x) \
+						{ \
+							FragmentColor * const dest_fragment = dest_line + x; \
+							dest_fragment->r = 63; \
+							dest_fragment->g = 0; \
+							dest_fragment->b = 0; \
+						}
+					
+					if(top || bottom)
+					{
+						X432R_DRAW_SOFTRAST_DEBUG_COLOR( min(xl, xr), max(xl, xr) )
+					}
+					else
+					{
+						const int nxl = left->X;
+						const int nxr = right->X;
+						
+						X432R_DRAW_SOFTRAST_DEBUG_COLOR( min(xl, nxl), max(xl, nxl) )
+						X432R_DRAW_SOFTRAST_DEBUG_COLOR( min(xr, nxr), max(xr, nxr) )
+					}
+					
+					#undef X432R_DRAW_SOFTRAST_DEBUG_COLOR
+				}
+				
+				first = false;
+			}
+*/		}
+	}
+	#endif
 
 	
 	//rotates verts counterclockwise
@@ -1020,7 +1155,29 @@ public:
 				return;
 
 			bool horizontal = left.Y == right.Y;
+			
+			#ifndef X432R_SOFTRAST_OPTIMIZE_TEST
 			runscanlines<SLI>(&left,&right,horizontal, lineHack);
+			#else
+			switch(engine->width)
+			{
+				case (256 * 4):
+					runscanlines<SLI, 4>(&left,&right,horizontal, lineHack);
+					break;
+				
+				case (256 * 3):
+					runscanlines<SLI, 3>(&left,&right,horizontal, lineHack);
+					break;
+				
+				case (256 * 2):
+					runscanlines<SLI, 2>(&left,&right,horizontal, lineHack);
+					break;
+				
+				default:
+					runscanlines<SLI, 1>(&left,&right,horizontal, lineHack);
+					break;
+			}
+			#endif
 
 			//if we ran out of an edge, step to the next one
 			if(right.Height == 0) {
@@ -1743,3 +1900,870 @@ GPU3DInterface gpu3DRasterize = {
 	SoftRastVramReconfigureSignal
 };
 
+
+#ifdef X432R_CUSTOMRENDERER_ENABLED
+#include "GPU.h"
+
+#if defined(_MSC_VER) && (_MSC_VER >= 1700)
+#ifdef X432R_PPL_TEST
+#include <ppl.h>
+#endif
+#endif
+
+#ifdef X432R_CUSTOMSOFTRASTENGINE_ENABLED
+
+#ifndef X432R_SOFTRAST_OPTIMIZE_TEST
+template<bool CUSTOM>
+void SoftRasterizerEngine::ProcessClippedPolygons(const u32 width, const u32 height)
+{
+	const float xfactor = (float)width / 256.0f;
+	const float yfactor = (float)height / 192.0f;
+	const float xmax = (256.0f * xfactor) - (CUSTOM ? 0.001f : 0.0f);		//fudge factor to keep from overrunning render buffers
+	const float ymax = (192.0f * yfactor) - (CUSTOM ? 0.001f : 0.0f);
+#else
+template<u32 RENDER_MAGNIFICATION>
+void SoftRasterizerEngine::ProcessClippedPolygons()
+{
+	static const float xfactor = (float)RENDER_MAGNIFICATION;
+	static const float yfactor = (float)RENDER_MAGNIFICATION;
+	static const float xmax = (256.0f * xfactor) - ( (RENDER_MAGNIFICATION != 1) ? 0.001f : 0.0f );		//fudge factor to keep from overrunning render buffers
+	static const float ymax = (192.0f * yfactor) - ( (RENDER_MAGNIFICATION != 1) ? 0.001f : 0.0f );
+#endif
+	
+	TexCacheItem* last_texture_key = NULL;
+	u32 last_texture_format = 0, last_texture_palette = 0;
+	bool need_init_texture = true;
+	
+	u32 i, j;
+	
+	for(i = 0; i < clippedPolyCounter; ++i)			// ループを1つにまとめて高速化のつもり
+	{
+		GFX3D_Clipper::TClippedPoly& clipped_poly = clippedPolys[i];
+		POLY *poly = clipped_poly.poly;
+		int type = clipped_poly.type;
+		VERT* verts = &clipped_poly.clipVerts[0];
+		
+		
+		//--- performViewportTransforms ---
+		
+		//viewport transforms
+		for(j = 0; j < type; ++j)
+		{
+			VERT &vert = verts[j];
+			float coord0 = vert.coord[0];
+			float coord1 = vert.coord[1];
+			float coord2 = vert.coord[2];
+			float coord3 = vert.coord[3];
+			float coord3x2 = coord3 * 2.0f;
+			
+			//homogeneous divide
+			coord0 = ( (coord0 + coord3) / coord3x2 );
+			coord1 = ( (coord1 + coord3) / coord3x2 );
+			coord2 = ( (coord2 + coord3) / coord3x2 );
+			
+			vert.texcoord[0] = vert.texcoord[0] / coord3;
+			vert.texcoord[1] = vert.texcoord[1] / coord3;
+			
+			//CONSIDER: do we need to guarantee that these are in bounds? perhaps not.
+			//coord0 = max( 0.0, min(1.0, coord0) );
+			//coord1 = max( 0.0, min(1.0, coord1) );
+			//coord2 = max( 0.0, min(1.0, coord2) );
+			
+			//perspective-correct the colors
+			vert.fcolor[0] = vert.fcolor[0] / coord3;
+			vert.fcolor[1] = vert.fcolor[1] / coord3;
+			vert.fcolor[2] = vert.fcolor[2] / coord3;
+			
+			//viewport transformation
+			VIEWPORT viewport;
+			viewport.decode(poly->viewport);
+			
+			coord0 *= (float)viewport.width * xfactor;
+			coord0 += (float)viewport.x * xfactor;
+			
+			coord1 *= (float)viewport.height * yfactor;
+			coord1 += (float)viewport.y * yfactor;
+			
+			coord1 = ymax - coord1;
+			
+			//well, i guess we need to do this to keep Princess Debut from rendering huge polys.
+			//there must be something strange going on
+			coord0 = max( 0.0f, min(xmax, coord0) );
+			coord1 = max( 0.0f, min(ymax, coord1) );
+			
+			
+			//--- performCoordAdjustment ---
+			
+			//here is a hack which needs to be removed.
+			//at some point our shape engine needs these to be converted to "fixed point"
+			//which is currently just a float
+			vert.coord[0] = (float)( (int)(16.0f * coord0) );
+			vert.coord[1] = (float)( (int)(16.0f * coord1) );
+			vert.coord[2] = coord2;
+		}
+		
+		
+		//--- performBackfaceTests ---
+		{
+			PolyAttr poly_attr;
+			poly_attr.setup(poly->polyAttr);
+		
+			//HACK: backface culling
+			//this should be moved to gfx3d, but first we need to redo the way the lists are built
+			//because it is too convoluted right now.
+			//(must we throw out verts if a poly gets backface culled? if not, then it might be easier)
+		
+			//an older approach
+			//(not good enough for quads and other shapes)
+			//float ab[2], ac[2]; Vector2Copy(ab, verts[1].coord); Vector2Copy(ac, verts[2].coord); Vector2Subtract(ab, verts[0].coord); 
+			//Vector2Subtract(ac, verts[0].coord); float cross = Vector2Cross(ab, ac); polyAttr.backfacing = (cross>0); 
+		
+			//a better approach
+			// we have to support somewhat non-convex polygons (see NSMB world map 1st screen).
+			// this version should handle those cases better.
+			int n = type - 1;
+		
+			float facing = (verts[0].y + verts[n].y) * (verts[0].x - verts[n].x)
+							+ (verts[1].y + verts[0].y) * (verts[1].x - verts[0].x)
+							+ (verts[2].y + verts[1].y) * (verts[2].x - verts[1].x);
+		
+			for(j = 2; j < n; j++)
+				facing += (verts[j+1].y + verts[j].y) * (verts[j+1].x - verts[j].x);
+	
+			poly_attr.backfacing = (facing < 0);
+			polyBackfacing[i] = poly_attr.backfacing;
+			polyVisible[i] = poly_attr.isVisible(poly_attr.backfacing);
+		}
+		
+		
+		//--- setupTextures ---
+		{
+			//make sure all the textures we'll need are cached
+			//(otherwise on a multithreaded system there will be multiple writers-- 
+			//this SHOULD be read-only, although some day the texcache may collect statistics or something
+			//and then it won't be safe.
+			if( need_init_texture || (last_texture_format != poly->texParam) || (last_texture_palette != poly->texPalette) )
+			{
+				last_texture_key = TexCache_SetTexture(TexFormat_15bpp, poly->texParam, poly->texPalette);
+				last_texture_format = poly->texParam;
+				last_texture_palette = poly->texPalette;
+				need_init_texture = false;
+			}
+		
+			//printf("%08X %d\n",poly->texParam,rasterizerUnit[0].textures.currentNum);
+			polyTexKeys[i] = last_texture_key;
+		}
+	}
+}
+
+namespace X432R
+{
+	static FragmentColor softRast_TempClearImageColor[256 * 192];
+	static Fragment softRast_TempClearImageDepthStencil[256 * 192];
+}
+
+#ifndef X432R_SOFTRAST_OPTIMIZE_TEST
+template <u32 RENDER_MAGNIFICATION>
+void SoftRasterizerEngine::InitFramebuffer(const u32 width, const u32 height, const bool clear_image)
+{
+	const u32 fragment_count = width * height;
+#else
+template <u32 RENDER_MAGNIFICATION>
+void SoftRasterizerEngine::InitFramebuffer(const bool clear_image)
+{
+	static const u32 width = 256 * RENDER_MAGNIFICATION;
+	static const u32 height = 192 * RENDER_MAGNIFICATION;
+	static const u32 fragment_count = width * height;
+#endif
+	
+	Fragment clearFragment;
+	FragmentColor clearFragmentColor;
+	
+	clearFragment.isTranslucentPoly = 0;
+	clearFragmentColor.r = GFX3D_5TO6(gfx3d.renderState.clearColor & 0x1F);
+	clearFragmentColor.g = GFX3D_5TO6( (gfx3d.renderState.clearColor >> 5) & 0x1F );
+	clearFragmentColor.b = GFX3D_5TO6( (gfx3d.renderState.clearColor >> 10) & 0x1F );
+	clearFragmentColor.a = ( (gfx3d.renderState.clearColor >> 16) & 0x1F );
+	clearFragment.polyid.opaque = (gfx3d.renderState.clearColor >> 24) & 0x3F;
+	
+	//special value for uninitialized translucent polyid. without this, fires in spiderman2 dont display
+	//I am not sure whether it is right, though. previously this was cleared to 0, as a guess,
+	//but in spiderman2 some fires with polyid 0 try to render on top of the background
+	clearFragment.polyid.translucent = kUnsetTranslucentPolyID; 
+	clearFragment.depth = gfx3d.renderState.clearDepth;
+	clearFragment.stencil = 0;
+	clearFragment.isTranslucentPoly = 0;
+	clearFragment.fogged = BIT15(gfx3d.renderState.clearColor);
+	
+	#ifdef X432R_CUSTOMRENDERER_CLEARIMAGE_ENABLED
+	if(clear_image)
+	{
+		assert( (width <= 1024) && (height <= 768) && ( (width / 256) == RENDER_MAGNIFICATION ) && ( (height / 192) == RENDER_MAGNIFICATION ) );
+		
+		u16* clearImage = (u16*)MMU.texInfo.textureSlotAddr[2];
+		u16* clearDepth = (u16*)MMU.texInfo.textureSlotAddr[3];
+		
+		//the lion, the witch, and the wardrobe (thats book 1, suck it you new-school numberers)
+		//uses the scroll registers in the main game engine
+		u16 scroll = T1ReadWord(MMU.ARM9_REG,0x356); //CLRIMAGE_OFFSET
+		u16 xscroll = scroll&0xFF;
+		u16 yscroll = (scroll>>8)&0xFF;
+		
+		FragmentColor *dest_fragmentcolor = X432R::softRast_TempClearImageColor;
+		Fragment *dest_fragment = X432R::softRast_TempClearImageDepthStencil;
+		
+		for(int iy = 0; iy < GFX3D_FRAMEBUFFER_HEIGHT; ++iy)
+		{
+			int y = ( (iy + yscroll) & 255 ) << 8;
+			
+			for(int ix = 0; ix < GFX3D_FRAMEBUFFER_WIDTH; ++ix, ++dest_fragmentcolor, ++dest_fragment)
+			{
+				int x = (ix + xscroll) & 255;
+				int adr = y + x;
+				
+				//this is tested by harry potter and the order of the phoenix.
+				//TODO (optimization) dont do this if we are mapped to blank memory (such as in sonic chronicles)
+				//(or use a special zero fill in the bulk clearing above)
+				u16 col = clearImage[adr];
+				dest_fragmentcolor->color = RGB15TO6665( col, 31 * (col >> 15) );
+				
+				//this is tested quite well in the sonic chronicles main map mode
+				//where depth values are used for trees etc you can walk behind
+				u16 depth = clearDepth[adr];
+				dest_fragment->fogged = BIT15(depth);
+				dest_fragment->depth = DS_DEPTH15TO24(depth);
+			}
+		}
+		
+		const FragmentColor *source_fragmentcolor;
+		const Fragment *source_fragment;
+		u32 x, y, downscaled_index;
+		
+		dest_fragmentcolor = screenColor;
+		dest_fragment = screen;
+		
+		for(y = 0; y < height; ++y)
+		{
+			if( (y % RENDER_MAGNIFICATION) == 0 )
+				downscaled_index = y * 256;
+			
+			source_fragmentcolor = X432R::softRast_TempClearImageColor + downscaled_index;
+			source_fragment = X432R::softRast_TempClearImageDepthStencil + downscaled_index;
+			
+			for(x = 0; x < width; ++x, ++dest_fragmentcolor, ++dest_fragment)
+			{
+				*dest_fragmentcolor = *source_fragmentcolor;
+				*dest_fragment = *source_fragment;
+				
+				if( (y % RENDER_MAGNIFICATION) == (RENDER_MAGNIFICATION - 1) )
+				{
+					++source_fragmentcolor;
+					++source_fragment;
+				}
+			}
+		}
+	}
+	else
+	#endif
+	{
+		FragmentColor *dstColor = screenColor;
+		Fragment *dst = screen;
+		
+		for(u32 i = 0; i < fragment_count; ++i, ++dstColor, ++dst)
+		{
+			*dst = clearFragment;
+			*dstColor = clearFragmentColor;
+		}
+	}
+	
+	
+	#ifdef X432R_CUSTOMRENDERER_DEBUG
+	if(clear_image)
+		X432R::ShowDebugMessage("SoftRast ClearImage");
+	#endif
+}
+#endif
+
+namespace X432R
+{
+	template <u32 RENDER_MAGNIFICATION>
+	static char SoftRastInit()
+	{
+		X432R_STATIC_RENDER_MAGNIFICATION_CHECK();
+		
+		ClearBuffers();
+		
+		return ::SoftRastInit();
+	}
+	
+	template <u32 RENDER_MAGNIFICATION>
+	static void SoftRastRender()
+	{
+		X432R_STATIC_RENDER_MAGNIFICATION_CHECK();
+		
+		#ifdef X432R_PROCESSTIME_CHECK
+		AutoStopTimeCounter timecounter(timeCounter_3D);
+		#endif
+		
+		// Force threads to finish before rendering with new data
+		if(rasterizerCores > 1)
+		{
+			for(u32 i = 0; i < rasterizerCores; ++i)
+			{
+				rasterizerUnitTask[i].finish();
+			}
+		}
+		
+		mainSoftRasterizer.polylist = gfx3d.polylist;
+		mainSoftRasterizer.vertlist = gfx3d.vertlist;
+		mainSoftRasterizer.indexlist = &gfx3d.indexlist;
+		mainSoftRasterizer.screen = _screen;
+		mainSoftRasterizer.screenColor = _screenColor;
+		
+		mainSoftRasterizer.width = 256 * RENDER_MAGNIFICATION;
+		mainSoftRasterizer.height = 192 * RENDER_MAGNIFICATION;
+		
+		//setup fog variables (but only if fog is enabled)
+		if(gfx3d.renderState.enableFog)
+			mainSoftRasterizer.updateFogTable();
+		
+		#ifndef X432R_CUSTOMSOFTRASTENGINE_ENABLED
+		mainSoftRasterizer.initFramebuffer(mainSoftRasterizer.width, mainSoftRasterizer.height, gfx3d.renderState.enableClearImage ? true : false);
+		#elif !defined(X432R_SOFTRAST_OPTIMIZE_TEST)
+		mainSoftRasterizer.InitFramebuffer<RENDER_MAGNIFICATION>(mainSoftRasterizer.width, mainSoftRasterizer.height, gfx3d.renderState.enableClearImage);
+		#else
+		mainSoftRasterizer.InitFramebuffer<RENDER_MAGNIFICATION>(gfx3d.renderState.enableClearImage);
+		#endif
+		
+		mainSoftRasterizer.updateToonTable();
+		mainSoftRasterizer.updateFloatColors();
+		mainSoftRasterizer.performClipping(CommonSettings.GFX3D_HighResolutionInterpolateColor);
+		
+		#ifndef X432R_CUSTOMSOFTRASTENGINE_ENABLED
+		mainSoftRasterizer.performViewportTransforms<true>(mainSoftRasterizer.width, mainSoftRasterizer.height);
+		mainSoftRasterizer.performBackfaceTests();
+		mainSoftRasterizer.performCoordAdjustment(true);
+		mainSoftRasterizer.setupTextures(true);
+		#elif !defined(X432R_SOFTRAST_OPTIMIZE_TEST)
+		mainSoftRasterizer.ProcessClippedPolygons<true>(mainSoftRasterizer.width, mainSoftRasterizer.height);
+		#else
+		mainSoftRasterizer.ProcessClippedPolygons<RENDER_MAGNIFICATION>();
+		#endif
+		
+		softRastHasNewData = true;
+		
+		if(rasterizerCores > 1)
+		{
+			for(u32 i = 0; i < rasterizerCores; ++i)
+			{
+				rasterizerUnitTask[i].execute( &execRasterizerUnit, (void *)i );
+			}
+		}
+		else
+			rasterizerUnit[0].mainLoop<false>(&mainSoftRasterizer);
+	}
+	
+	
+	static inline RGBA8888 FragmentColorToRGBA8888(const FragmentColor color)
+	{
+		RGBA8888 result;
+		
+		if(color.a == 0)
+			return result;		// RGBA8888は生成時に0で初期化されている
+		
+		// RGBA6665 → BGRA8888
+		result.R = color.r << 2;
+		result.G = color.g << 2;
+		result.B = color.b << 2;
+//		result.A = (color.a << 3) + 7;	// 0x1Fを3ビット左シフトしても不透明にならないため値をオフセット
+		result.A = color.a << 3;
+		
+		return result;
+	}
+	
+	static inline FragmentColor RGBA8888ToFragmentColor(const RGBA8888 color)
+	{
+		FragmentColor result;
+		
+		if(color.A == 0)
+		{
+			result.color = 0;
+			return result;
+		}
+		
+		result.r = color.R >> 2;
+		result.g = color.G >> 2;
+		result.b = color.B >> 2;
+		result.a = color.A >> 3;
+		
+		return result;
+	}
+	
+	
+	static u8 softRast_FogColorR = 0;
+	static u8 softRast_FogColorG = 0;
+	static u8 softRast_FogColorB = 0;
+	static u8 softRast_FogColorA = 0;
+	
+	static inline void SoftRast_UpdateFogParams()
+	{
+		softRast_FogColorR = GFX3D_5TO6(gfx3d.renderState.fogColor & 0x1F);
+		softRast_FogColorG = GFX3D_5TO6( (gfx3d.renderState.fogColor >> 5) & 0x1F );
+		softRast_FogColorB = GFX3D_5TO6( (gfx3d.renderState.fogColor >> 10) & 0x1F );
+		softRast_FogColorA = (gfx3d.renderState.fogColor>>16) & 0x1F;
+	}
+	
+	template <u32 RENDER_MAGNIFICATION>
+	static inline void SoftRast_DrawFog(const Fragment * const dest_fragment, FragmentColor * const dest_color)
+	{
+		if( !dest_fragment->fogged ) return;
+		
+		const u8 fog = mainSoftRasterizer.fogTable[ clamp<u32>(dest_fragment->depth >> 9, 0, 32767) ];
+		
+		if(fog == 0) return;
+		
+		#if 0
+		if(fog == 127)
+		{
+			dest_color->a = (softRast_FogColorA * 128) >> 7;
+			
+			if( !gfx3d.renderState.enableFogAlphaOnly )
+			{
+				dest_color->r = (softRast_FogColorR * 128) >> 7;
+				dest_color->g = (softRast_FogColorG * 128) >> 7;
+				dest_color->b = (softRast_FogColorB * 128) >> 7;
+			}
+		}
+		else
+		{
+			const u8 fog2 = 128 - fog;
+			
+			dest_color->a = ( (fog2 * dest_color->a) + (softRast_FogColorA * fog) ) >> 7;
+			
+			if( !gfx3d.renderState.enableFogAlphaOnly )
+			{
+				dest_color->r = ( (fog2 * dest_color->r) + (softRast_FogColorR * fog) ) >> 7;
+				dest_color->g = ( (fog2 * dest_color->g) + (softRast_FogColorG * fog) ) >> 7;
+				dest_color->b = ( (fog2 * dest_color->b) + (softRast_FogColorB * fog) ) >> 7;
+			}
+		}
+		#else
+		// フォグの描画結果を標準SoftRasterizerと同じにするためにフォグのalphaを無視
+		if(fog == 127)
+		{
+			if(gfx3d.renderState.enableFogAlphaOnly)
+				dest_color->a = (softRast_FogColorA * 128) >> 7;
+			else
+			{
+				dest_color->r = (softRast_FogColorR * 128) >> 7;
+				dest_color->g = (softRast_FogColorG * 128) >> 7;
+				dest_color->b = (softRast_FogColorB * 128) >> 7;
+			}
+		}
+		else
+		{
+			const u8 fog2 = 128 - fog;
+			
+			if(gfx3d.renderState.enableFogAlphaOnly)
+				dest_color->a = ( (fog2 * dest_color->a) + (softRast_FogColorA * fog) ) >> 7;
+			else
+			{
+				dest_color->r = ( (fog2 * dest_color->r) + (softRast_FogColorR * fog) ) >> 7;
+				dest_color->g = ( (fog2 * dest_color->g) + (softRast_FogColorG * fog) ) >> 7;
+				dest_color->b = ( (fog2 * dest_color->b) + (softRast_FogColorB * fog) ) >> 7;
+			}
+		}
+		#endif
+	}
+	
+	
+	static FragmentColor softRast_EdgeMarkingColors[8];
+//	static int softRast_EdgeMarkingDisabled[8];
+	
+	static inline void SoftRast_UpdateEdgeMarkingParams()
+	{
+		const u16 alpha = gfx3d.state.enableAntialiasing ? 0x0F : 0x1F;
+		FragmentColor color;
+		
+		//TODO - need to test and find out whether these get grabbed at flush time, or at render time
+		//we can do this by rendering a 3d frame and then freezing the system, but only changing the edge mark colors
+		for(int i = 0; i < 8; ++i)
+		{
+			color.color = RGB15TO5555( T1ReadWord( MMU.MMU_MEM[ARMCPU_ARM9][0x40], 0x330 + (i * 2) ), alpha );
+			color.r = GFX3D_5TO6(color.r);
+			color.g = GFX3D_5TO6(color.g);
+			color.b = GFX3D_5TO6(color.b);
+			
+			softRast_EdgeMarkingColors[i] = color;
+			
+			//zero 20-jun-2013 - this doesnt make any sense. at least, it should be related to the 0x8000 bit. if this is undocumented behaviour, lets write about which scenario proves it here, or which scenario is requiring this code.
+			//// this seems to be the only thing that selectively disables edge marking
+			//edgeMarkDisabled[i] = (col == 0x7FFF);
+//			softRast_EdgeMarkingDisabled[i] = 0;
+		}
+	}
+	
+/*	template <u32 RENDER_MAGNIFICATION>
+	static inline void SoftRast_DrawEdgeMarking()
+	{
+		static const u32 RENDER_WIDTH = 256 * RENDER_MAGNIFICATION;
+		static const u32 RENDER_HEIGHT = 192 * RENDER_MAGNIFICATION;
+		
+		
+		int x, y, i;
+		Fragment dest_fragment;
+		u8 self_polygonid;
+		FragmentColor edge_color;
+		
+//		for(i = 0, y = 0; y < RENDER_HEIGHT; ++y)
+		for(y = 1; y < (RENDER_HEIGHT - 1); ++y)
+		{
+			i = (y * RENDER_WIDTH) + 1;
+			
+//			for(x = 0; x < RENDER_WIDTH; ++x, ++i)
+			for(x = 1; x < (RENDER_WIDTH - 1); ++x, ++i)
+			{
+				dest_fragment = _screen[i];
+				self_polygonid = dest_fragment.polyid.opaque;
+				
+//				if( dest_fragment.isTranslucentPoly || softRast_EdgeMarkingDisabled[self_polygonid >> 3] ) continue;
+				if(dest_fragment.isTranslucentPoly) continue;
+				
+				// > is used instead of != to prevent double edges
+				// between overlapping polys of different IDs.
+				// also note that the edge generally goes on the outside, not the inside, (maybe needs to change later)
+				// and that polys with the same edge color can make edges against each other.
+				
+				edge_color = softRast_EdgeMarkingColors[self_polygonid >> 3];
+				
+				#define PIXOFFSET(dx,dy)	( (dy * RENDER_WIDTH) + dx )
+//				#define ISEDGE(dx,dy)		( (x + dx) != RENDER_WIDTH ) && ( (x + dx) != -1 ) && ( (y + dy) != RENDER_HEIGHT ) && ( (y + dy) != -1 ) && (self_polygonid > _screen[i + PIXOFFSET(dx, dy)].polyid.opaque) )
+				#define ISEDGE(dx,dy)		(self_polygonid > _screen[i + PIXOFFSET(dx, dy)].polyid.opaque)
+				#define DRAWEDGE(dx,dy)		alphaBlend( _screenColor[i + PIXOFFSET(dx, dy)], edge_color )
+				
+				const bool upleft		= ISEDGE(-1, -1);
+				const bool up			= ISEDGE( 0, -1);
+				const bool upright		= ISEDGE( 1, -1);
+				const bool left			= ISEDGE(-1,  0);
+				const bool right		= ISEDGE( 1,  0);
+				const bool downleft		= ISEDGE(-1,  1);
+				const bool down			= ISEDGE( 0,  1);
+				const bool downright	= ISEDGE( 1,  1);
+				
+				if(upleft && upright && downleft && !downright)
+					DRAWEDGE(-1,-1);
+				
+				if(up && !down)
+					DRAWEDGE(0,-1);
+				
+				if(upleft && upright && !downleft && downright)
+					DRAWEDGE(1,-1);
+				
+				if(left && !right)
+					DRAWEDGE(-1,0);
+				
+				if(right && !left)
+					DRAWEDGE(1,0);
+				
+				if(upleft && !upright && downleft && downright)
+					DRAWEDGE(-1,1);
+				
+				if(down && !up)
+					DRAWEDGE(0,1);
+				
+				if(!upleft && upright && downleft && downright)
+					DRAWEDGE(1,1);
+				
+				#undef PIXOFFSET
+				#undef ISEDGE
+				#undef DRAWEDGE
+			}
+		}
+	}
+*/	
+	template <u32 RENDER_MAGNIFICATION>
+	static inline void SoftRast_DrawEdgeMarking(const u32 x, const u32 y, const Fragment * const dest_fragment, FragmentColor * const dest_color)
+	{
+		static const u32 RENDER_WIDTH = 256 * RENDER_MAGNIFICATION;
+		static const u32 RENDER_HEIGHT = 192 * RENDER_MAGNIFICATION;
+		
+//		if( (x <= 0) || ( x >= (RENDER_WIDTH - 1) ) || (y <= 0) || ( y >= (RENDER_HEIGHT - 1) ) ) return;
+		if( (x <= 1) || ( x >= (RENDER_WIDTH - 2) ) || (y <= 1) || ( y >= (RENDER_HEIGHT - 2) ) ) return;
+		
+		
+		const u8 self_polygonid = dest_fragment->polyid.opaque;
+		
+		const Fragment *target_fragment;
+		u8 target_id;
+		
+		#define PIXOFFSET(dx,dy)	( dest_fragment + ( (s32)dy * (s32)RENDER_WIDTH ) + (s32)dx )
+//		#define ISEDGE()			( !target_fragment->isTranslucentPoly && (target_id > self_polygonid) && !softRast_EdgeMarkingDisabled[target_id >> 3] )
+		#define ISEDGE()			( !target_fragment->isTranslucentPoly && (target_id > self_polygonid) )
+		
+		
+/*		#define DRAWEDGE(dx,dy) \
+			target_fragment = PIXOFFSET(dx, dy); \
+			target_id = target_fragment->polyid.opaque; \
+			if( ISEDGE() ) \
+			{ \
+				alphaBlend( *dest_color, softRast_EdgeMarkingColors[target_id >> 3] ); \
+				return; \
+			}
+		
+//		DRAWEDGE(-1, -1)
+		DRAWEDGE( 0, -1)
+//		DRAWEDGE( 1, -1)
+		DRAWEDGE(-1,  0)
+		DRAWEDGE( 1,  0)
+//		DRAWEDGE(-1,  1)
+		DRAWEDGE( 0,  1)
+//		DRAWEDGE( 1,  1)
+		
+		#undef DRAWEDGE
+*/		
+		
+		#define DRAWEDGE_2(dx,dy,dx2,dy2) \
+			target_fragment = PIXOFFSET(dx, dy); \
+			target_id = target_fragment->polyid.opaque; \
+			if( ISEDGE() && ( target_id <= PIXOFFSET(dx2, dy2)->polyid.opaque ) ) \
+			{ \
+				alphaBlend( *dest_color, softRast_EdgeMarkingColors[target_id >> 3] ); \
+				return; \
+			}
+		
+		#define DRAWEDGE_4(dx,dy,dx2,dy2,dx3,dy3,dx4,dy4) \
+			target_fragment = PIXOFFSET(dx, dy); \
+			target_id = target_fragment->polyid.opaque; \
+			if( ISEDGE() && ( target_id > PIXOFFSET(dx2, dy2)->polyid.opaque ) && ( target_id > PIXOFFSET(dx3, dy3)->polyid.opaque ) && ( target_id <= PIXOFFSET(dx4, dy4)->polyid.opaque ) ) \
+			{ \
+				alphaBlend( *dest_color, softRast_EdgeMarkingColors[target_id >> 3] ); \
+				return; \
+			}
+		
+		DRAWEDGE_2(		 0, -1,		 0, -2		)
+		DRAWEDGE_2(		 0,  1,		 0,  2		)
+		DRAWEDGE_2(		-1,  0,		-2,  0		)
+		DRAWEDGE_2(		 1,  0,		 2,  0		)
+		
+		DRAWEDGE_4(		 1,  1,		 2,  0,		 0,  2,		 2,  2		)
+		DRAWEDGE_4(		-1,  1,		-2,  0,		 0,  2,		-2,  2		)
+		DRAWEDGE_4(		 1, -1,		 0, -2,		 2,  0,		 2, -2		)
+		DRAWEDGE_4(		-1, -1,		 0, -2,		-2,  0,		-2, -2		)
+		
+		#undef DRAWEDGE_2
+		#undef DRAWEDGE_4
+		
+		
+		#undef PIXOFFSET
+		#undef ISEDGE
+	}
+	
+	
+	#if !defined(_MSC_VER) || (_MSC_VER < 1700) || !defined(X432R_PPL_TEST)
+	template <u32 RENDER_MAGNIFICATION, bool FOG_ENABLED, bool EDGEMARKING_ENABLED>
+	static void SoftRast_DownscaleFramebuffer()
+	{
+		u32 * const highresobuffer_begin = backBuffer.GetHighResolution3DBuffer();
+		u32 *highreso_buffer = highresobuffer_begin;
+		FragmentColor *color_buffer = _screenColor;
+		const Fragment *fragment_buffer = _screen;
+		u32 * const gfx3d_buffer = (u32 *)gfx3d_convertedScreen;
+		
+		u32 x, y, remainder_x, remainder_y, downscaled_index;
+		RGBA8888 color_rgba8888, color_tiletopleft, color_tiletopright, color_tilebottomleft;
+		u32 tiletop_index, tilebottom_index, tileleft_x;
+		
+		for( y = 0; y < (192 * RENDER_MAGNIFICATION); ++y )
+		{
+			remainder_y = (y % RENDER_MAGNIFICATION);
+			downscaled_index = (y / RENDER_MAGNIFICATION) * 256;
+			
+			for( x = 0; x < (256 * RENDER_MAGNIFICATION); ++x, ++color_buffer, ++fragment_buffer, ++highreso_buffer )
+			{
+				remainder_x = (x % RENDER_MAGNIFICATION);
+				
+				if(EDGEMARKING_ENABLED)
+					SoftRast_DrawEdgeMarking<RENDER_MAGNIFICATION>(x, y, fragment_buffer, color_buffer);
+				
+				if(FOG_ENABLED)
+					SoftRast_DrawFog<RENDER_MAGNIFICATION>(fragment_buffer, color_buffer);
+				
+				color_rgba8888 = FragmentColorToRGBA8888(*color_buffer);
+				*highreso_buffer = color_rgba8888.Color;
+				
+				// Bilinear
+				if( ( remainder_y != (RENDER_MAGNIFICATION - 1) ) || ( remainder_x != (RENDER_MAGNIFICATION - 1) ) ) continue;
+				
+				tiletop_index = ( y - (RENDER_MAGNIFICATION - 1) ) * (256 * RENDER_MAGNIFICATION);
+				tilebottom_index = y * (256 * RENDER_MAGNIFICATION);
+				tileleft_x = x - (RENDER_MAGNIFICATION - 1);
+				
+				color_tiletopleft = highresobuffer_begin[tiletop_index + tileleft_x];
+				color_tiletopright = highresobuffer_begin[tiletop_index + x];
+				color_tilebottomleft = highresobuffer_begin[tilebottom_index + tileleft_x];
+				
+				color_rgba8888.R = (u8)( ( (u32)color_tiletopleft.R + (u32)color_tiletopright.R + (u32)color_tilebottomleft.R + (u32)color_rgba8888.R ) >> 2 );
+				color_rgba8888.G = (u8)( ( (u32)color_tiletopleft.G + (u32)color_tiletopright.G + (u32)color_tilebottomleft.G + (u32)color_rgba8888.G ) >> 2 );
+				color_rgba8888.B = (u8)( ( (u32)color_tiletopleft.B + (u32)color_tiletopright.B + (u32)color_tilebottomleft.B + (u32)color_rgba8888.B ) >> 2 );
+				color_rgba8888.A = (u8)( ( (u32)color_tiletopleft.A + (u32)color_tiletopright.A + (u32)color_tilebottomleft.A + (u32)color_rgba8888.A ) >> 2 );
+				
+				gfx3d_buffer[ downscaled_index + (x / RENDER_MAGNIFICATION) ] = RGBA8888ToFragmentColor(color_rgba8888).color;
+			}
+		}
+	}
+	#else
+	template <u32 RENDER_MAGNIFICATION, bool FOG_ENABLED, bool EDGEMARKING_ENABLED>
+	static void SoftRast_DownscaleFramebuffer()
+	{
+		u32 * const highresobuffer_begin = backBuffer.GetHighResolution3DBuffer();
+		FragmentColor * const colorbuffer_begin = _screenColor;
+		const Fragment * const fragmentbuffer_begin = _screen;
+		u32 * const gfx3d_buffer = (u32 *)gfx3d_convertedScreen;
+		
+		concurrency::parallel_for( (u32)0, RENDER_MAGNIFICATION, [&](const u32 offset)
+		{
+			const u32 y_begin = 192 * offset;
+			const u32 y_end = y_begin + 192;
+			
+			const u32 highreso_index = y_begin * 256 * RENDER_MAGNIFICATION;
+			
+			u32 *highreso_buffer = highresobuffer_begin + highreso_index;
+			FragmentColor *color_buffer = colorbuffer_begin + highreso_index;
+			const Fragment *fragment_buffer = fragmentbuffer_begin + highreso_index;
+			
+			u32 x, y, remainder_x, remainder_y, downscaled_index;
+			RGBA8888 color_rgba8888, color_tiletopleft, color_tiletopright, color_tilebottomleft;
+			u32 tiletop_index, tilebottom_index, tileleft_x;
+			
+			for(y = y_begin; y < y_end; ++y)
+			{
+				remainder_y = (y % RENDER_MAGNIFICATION);
+				downscaled_index = (y / RENDER_MAGNIFICATION) * 256;
+				
+				for( x = 0; x < (256 * RENDER_MAGNIFICATION); ++x, ++color_buffer, ++fragment_buffer, ++highreso_buffer )
+				{
+					remainder_x = (x % RENDER_MAGNIFICATION);
+					
+					if(EDGEMARKING_ENABLED)
+						SoftRast_DrawEdgeMarking<RENDER_MAGNIFICATION>(x, y, fragment_buffer, color_buffer);
+					
+					if(FOG_ENABLED)
+						SoftRast_DrawFog<RENDER_MAGNIFICATION>(fragment_buffer, color_buffer);
+					
+					color_rgba8888 = FragmentColorToRGBA8888(*color_buffer);
+					*highreso_buffer = color_rgba8888.Color;
+					
+					// Bilinear
+					if( ( remainder_y != (RENDER_MAGNIFICATION - 1) ) || ( remainder_x != (RENDER_MAGNIFICATION - 1) ) ) continue;
+					
+					tiletop_index = ( y - (RENDER_MAGNIFICATION - 1) ) * (256 * RENDER_MAGNIFICATION);
+					tilebottom_index = y * (256 * RENDER_MAGNIFICATION);
+					tileleft_x = x - (RENDER_MAGNIFICATION - 1);
+					
+					color_tiletopleft = highresobuffer_begin[tiletop_index + tileleft_x];
+					color_tiletopright = highresobuffer_begin[tiletop_index + x];
+					color_tilebottomleft = highresobuffer_begin[tilebottom_index + tileleft_x];
+					
+					color_rgba8888.R = (u8)( ( (u32)color_tiletopleft.R + (u32)color_tiletopright.R + (u32)color_tilebottomleft.R + (u32)color_rgba8888.R ) >> 2 );
+					color_rgba8888.G = (u8)( ( (u32)color_tiletopleft.G + (u32)color_tiletopright.G + (u32)color_tilebottomleft.G + (u32)color_rgba8888.G ) >> 2 );
+					color_rgba8888.B = (u8)( ( (u32)color_tiletopleft.B + (u32)color_tiletopright.B + (u32)color_tilebottomleft.B + (u32)color_rgba8888.B ) >> 2 );
+					color_rgba8888.A = (u8)( ( (u32)color_tiletopleft.A + (u32)color_tiletopright.A + (u32)color_tilebottomleft.A + (u32)color_rgba8888.A ) >> 2 );
+					
+					gfx3d_buffer[ downscaled_index + (x / RENDER_MAGNIFICATION) ] = RGBA8888ToFragmentColor(color_rgba8888).color;
+				}
+			}
+		});
+	}
+	#endif
+	
+	template <u32 RENDER_MAGNIFICATION>
+	static void SoftRastRenderFinish()
+	{
+		X432R_STATIC_RENDER_MAGNIFICATION_CHECK();
+		
+		if( !softRastHasNewData ) return;
+		
+		
+		#ifdef X432R_PROCESSTIME_CHECK
+		AutoStopTimeCounter timecounter(timeCounter_3DFinish1);
+		#endif
+		
+		if(rasterizerCores > 1)
+		{
+			for(u32 i = 0; i < rasterizerCores; ++i)
+			{
+				rasterizerUnitTask[i].finish();
+			}
+		}
+		
+		TexCache_EvictFrame();
+		
+		
+		const bool edgemarking_enabled = CommonSettings.GFX3D_EdgeMark && gfx3d.renderState.enableEdgeMarking;
+		
+		if(edgemarking_enabled)
+		{
+			SoftRast_UpdateEdgeMarkingParams();
+//			SoftRast_DrawEdgeMarking<RENDER_MAGNIFICATION>();
+		}
+		
+		#define X432R_CALL_DOWNSCALEFRAMEBUFFER(fog_enabled) \
+			edgemarking_enabled ? SoftRast_DownscaleFramebuffer<RENDER_MAGNIFICATION, fog_enabled, true>() : SoftRast_DownscaleFramebuffer<RENDER_MAGNIFICATION, fog_enabled, false>()
+		
+		const u8 * const fogdensity_pointer = MMU.MMU_MEM[ARMCPU_ARM9][0x40] + 0x360;
+		
+		if( !gfx3d.renderState.enableFog || ( ( fogdensity_pointer[0] == 0 ) && ( fogdensity_pointer[31] == 0 ) ) )
+			X432R_CALL_DOWNSCALEFRAMEBUFFER(false);
+		else
+		{
+			SoftRast_UpdateFogParams();
+			
+			X432R_CALL_DOWNSCALEFRAMEBUFFER(true);
+			
+			#ifdef X432R_CUSTOMRENDERER_DEBUG
+			if(gfx3d.renderState.enableFogAlphaOnly)
+				X432R::ShowDebugMessage("SoftRast FogAlphaOnly");
+			#endif
+		}
+		
+		#undef X432R_CALL_DOWNSCALEFRAMEBUFFER
+		
+		
+		softRastHasNewData = false;
+	}
+	
+	
+	GPU3DInterface gpu3DRasterize_X2 =
+	{
+		"SoftRasterizer X2 (512x384)",
+		X432R::SoftRastInit<2>,
+		SoftRastReset,
+		SoftRastClose,
+		X432R::SoftRastRender<2>,
+		X432R::SoftRastRenderFinish<2>,
+		SoftRastVramReconfigureSignal
+	};
+	
+	GPU3DInterface gpu3DRasterize_X3 =
+	{
+		"SoftRasterizer X3 (768x576)",
+		X432R::SoftRastInit<3>,
+		SoftRastReset,
+		SoftRastClose,
+		X432R::SoftRastRender<3>,
+		X432R::SoftRastRenderFinish<3>,
+		SoftRastVramReconfigureSignal
+	};
+	
+	GPU3DInterface gpu3DRasterize_X4 =
+	{
+		"SoftRasterizer X4 (1024x768)",
+		X432R::SoftRastInit<4>,
+		SoftRastReset,
+		SoftRastClose,
+		X432R::SoftRastRender<4>,
+		X432R::SoftRastRenderFinish<4>,
+		SoftRastVramReconfigureSignal
+	};
+}
+#endif

@@ -370,6 +370,10 @@ void HK_ToggleReadOnly(int, bool justPressed) {
 	else
 		osd->setLineColor(255,255,255);
 	osd->addLine(msg);
+	
+	#ifdef X432R_MENUITEMMOD_ENABLED
+	osd->setLineColor(255, 255, 255);
+	#endif
 }
 
 void HK_PlayMovie(int, bool justPressed) 
@@ -461,9 +465,11 @@ void HK_PreviousSaveSlot(int, bool justPressed) {
 }
 
 void HK_Pause(int, bool justPressed) { if(justPressed) TogglePause(); }
+#ifndef X432R_MENUITEMMOD_ENABLED
 void HK_FastForwardToggle(int, bool justPressed) { FastForward ^=1; }
 void HK_FastForwardKeyDown(int, bool justPressed) { FastForward = 1; }
 void HK_FastForwardKeyUp(int) { FastForward = 0; }
+#endif
 void HK_IncreaseSpeed(int, bool justPressed) { IncreaseSpeed(); }
 void HK_DecreaseSpeed(int, bool justPressed) { DecreaseSpeed(); }
 void HK_FrameLimitToggle(int, bool justPressed) {
@@ -475,11 +481,53 @@ void HK_FrameAdvanceKeyDown(int, bool justPressed) { FrameAdvance(true); }
 void HK_FrameAdvanceKeyUp(int) { FrameAdvance(false); }
 
 void HK_ToggleRasterizer(int, bool justPressed) { 
+	#ifndef X432R_CUSTOMRENDERER_ENABLED
 	if(cur3DCore == GPU3D_OPENGL_OLD || cur3DCore == GPU3D_OPENGL_3_2)
 		cur3DCore = GPU3D_SWRAST;
 	else cur3DCore = GPU3D_OPENGL_3_2;
 
 	Change3DCoreWithFallbackAndSave(cur3DCore);
+	#else
+	switch(cur3DCore)
+	{
+		case GPU3D_NULL:
+			return;
+		
+		case GPU3D_SWRAST:
+			cur3DCore = GPU3D_OPENGL_3_2;
+			break;
+		
+		case GPU3D_SWRAST_X2:
+			cur3DCore = GPU3D_OPENGL_X2;
+			break;
+		
+		case GPU3D_SWRAST_X3:
+			cur3DCore = GPU3D_OPENGL_X3;
+			break;
+		
+		case GPU3D_SWRAST_X4:
+			cur3DCore = GPU3D_OPENGL_X4;
+			break;
+		
+		case GPU3D_OPENGL_X2:
+			cur3DCore = GPU3D_SWRAST_X2;
+			break;
+		
+		case GPU3D_OPENGL_X3:
+			cur3DCore = GPU3D_SWRAST_X3;
+			break;
+		
+		case GPU3D_OPENGL_X4:
+			cur3DCore = GPU3D_SWRAST_X4;
+			break;
+		
+		default:
+			cur3DCore = GPU3D_SWRAST;
+			break;
+	}
+	
+	Change3DCoreWithFallbackAndSave(cur3DCore);
+	#endif
 }
 
 void HK_IncreasePressure(int, bool justPressed) {
@@ -532,6 +580,10 @@ void InitCustomKeys (SCustomKeys *keys)
 		key.handleKeyUp = NULL;
 		key.page = NUM_HOTKEY_PAGE;
 		key.param = 0;
+
+		#ifdef X432R_TOUCHINPUT_ENABLED
+		key.keyPressed = false;
+		#endif
 
 		//keys->key[i].timing = PROCESS_NOW;
 		i++;
@@ -594,14 +646,23 @@ void InitCustomKeys (SCustomKeys *keys)
 	keys->FrameAdvance.page = HOTKEY_PAGE_MAIN;
 	keys->FrameAdvance.key = 'N';
 
+	#ifndef X432R_MENUITEMMOD_ENABLED
 	keys->FastForward.handleKeyDown = HK_FastForwardKeyDown;
 	keys->FastForward.handleKeyUp = HK_FastForwardKeyUp;
+	#else
+	keys->FastForward.handleKeyDown = X432R::HK_FastForwardKeyDown;
+	keys->FastForward.handleKeyUp = X432R::HK_FastForwardKeyUp;
+	#endif
 	keys->FastForward.code = "FastForward";
 	keys->FastForward.name = STRW(ID_LABEL_HK5);
 	keys->FastForward.page = HOTKEY_PAGE_MAIN;
 	keys->FastForward.key = VK_TAB;
 
+	#ifndef X432R_MENUITEMMOD_ENABLED
 	keys->FastForwardToggle.handleKeyDown = HK_FastForwardToggle;
+	#else
+	keys->FastForwardToggle.handleKeyDown = X432R::HK_ToggleFastForwardKeyDown;
+	#endif
 	keys->FastForwardToggle.code = "FastForwardToggle";
 	keys->FastForwardToggle.name = STRW(ID_LABEL_HK6);
 	keys->FastForwardToggle.page = HOTKEY_PAGE_MAIN;
@@ -689,6 +750,35 @@ void InitCustomKeys (SCustomKeys *keys)
 	keys->QuickPrintScreen.page = HOTKEY_PAGE_TOOLS;
 	keys->QuickPrintScreen.key = VK_F12;
 	keys->QuickPrintScreen.modifiers = CUSTKEY_CTRL_MASK;
+
+	#ifdef X432R_MENUITEMMOD_ENABLED
+	keys->ToggleSoundEnabled.handleKeyDown = X432R::HK_ToggleSoundEnabledKeyDown;
+	keys->ToggleSoundEnabled.code = "X432R:ToggleSoundEnabled";
+	keys->ToggleSoundEnabled.name = L"Toggle Sound Enabled";
+	keys->ToggleSoundEnabled.page = HOTKEY_PAGE_TOOLS;
+	keys->ToggleSoundEnabled.key = NULL;
+	
+	keys->SlowMotion.handleKeyDown = X432R::HK_SlowMotionKeyDown;
+	keys->SlowMotion.handleKeyUp = X432R::HK_SlowMotionKeyUp;
+	keys->SlowMotion.code = "X432R:SlowMotion";
+	keys->SlowMotion.name = L"Slow-Motion";
+	keys->SlowMotion.page = HOTKEY_PAGE_TOOLS;
+	keys->SlowMotion.key = NULL;
+	
+	keys->ToggleSlowMotion.handleKeyDown = X432R::HK_ToggleSlowMotionKeyDown;
+	keys->ToggleSlowMotion.code = "X432R:ToggleSlowMotion";
+	keys->ToggleSlowMotion.name = L"Toggle Slow-Motion";
+	keys->ToggleSlowMotion.page = HOTKEY_PAGE_TOOLS;
+	keys->ToggleSlowMotion.key = NULL;
+	
+	#ifdef X432R_CUSTOMSCREENSCALING_ENABLED
+	keys->SwapSmallScreenSetting.handleKeyDown = X432R::HK_SwapSmallScreenSetting;
+	keys->SwapSmallScreenSetting.code = "X432R:SwapScreenSize";
+	keys->SwapSmallScreenSetting.name = L"Swap Screen Size";
+	keys->SwapSmallScreenSetting.page = HOTKEY_PAGE_TOOLS;
+	keys->SwapSmallScreenSetting.key = NULL;
+	#endif
+	#endif
 
 	keys->ToggleReadOnly.handleKeyDown = HK_ToggleReadOnly;
 	keys->ToggleReadOnly.code = "ToggleReadOnly";
